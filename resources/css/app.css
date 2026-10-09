@@ -1,3 +1,112 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    :root {
+        /* Base Backgrounds & Surfaces (Light Theme) */
+        --bg-app: #F8F9FC;
+        --bg-surface: #FFFFFF;
+        --bg-surface-hover: #F2F4F8;
+        --bg-surface-active: #E8EBF2;
+        --bg-surface-subdued: #F3F5FA;
+
+        /* Borders */
+        --border-subtle: #E5E7EB;
+        --border-strong: #D1D5DB;
+
+        /* Typography */
+        --text-primary: #111827;
+        --text-secondary: #4B5563;
+        --text-muted: #9CA3AF;
+
+        /* Primary Signature: Lavender #9B8AFB */
+        --primary: #9B8AFB;
+        --primary-hover: #8874F9;
+        --primary-active: #7862F7;
+        --primary-subdued: rgba(155, 138, 251, 0.12);
+        --primary-text: #FFFFFF;
+
+        /* Secondary Accent: Indigo #6366F1 */
+        --accent: #6366F1;
+        --accent-hover: #4F46E5;
+        --accent-subdued: rgba(99, 102, 241, 0.12);
+
+        /* Semantic Status Tokens */
+        --success: #10B981;
+        --success-subdued: rgba(16, 185, 129, 0.12);
+        --warning: #F59E0B;
+        --warning-subdued: rgba(245, 158, 11, 0.12);
+        --danger: #EF4444;
+        --danger-subdued: rgba(239, 68, 68, 0.12);
+        --info: #3B82F6;
+        --info-subdued: rgba(59, 130, 246, 0.12);
+    }
+
+    .dark {
+        /* Base Backgrounds & Surfaces (Dark Theme - Deep charcoal, never pure black) */
+        --bg-app: #121316;
+        --bg-surface: #1A1B20;
+        --bg-surface-hover: #22242B;
+        --bg-surface-active: #2A2D36;
+        --bg-surface-subdued: #16171C;
+
+        /* Borders */
+        --border-subtle: #292B34;
+        --border-strong: #383B47;
+
+        /* Typography */
+        --text-primary: #F3F4F6;
+        --text-secondary: #9CA3AF;
+        --text-muted: #6B7280;
+
+        /* Primary Signature in Dark Mode */
+        --primary: #9B8AFB;
+        --primary-hover: #AA9CFC;
+        --primary-active: #B8ACFD;
+        --primary-subdued: rgba(155, 138, 251, 0.18);
+        --primary-text: #0E0F12;
+
+        /* Secondary Accent in Dark Mode */
+        --accent: #818CF8;
+        --accent-hover: #6366F1;
+        --accent-subdued: rgba(129, 140, 248, 0.18);
+
+        /* Semantic Status Tokens (tuned for dark surfaces) */
+        --success: #34D399;
+        --success-subdued: rgba(52, 211, 153, 0.18);
+        --warning: #FBBF24;
+        --warning-subdued: rgba(251, 191, 36, 0.18);
+        --danger: #F87171;
+        --danger-subdued: rgba(248, 113, 113, 0.18);
+        --info: #60A5FA;
+        --info-subdued: rgba(96, 165, 250, 0.18);
+    }
+
+    body {
+        background-color: var(--bg-app);
+        color: var(--text-primary);
+        font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+}
+
+/* Accessibility: Focus visible ring */
+:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--bg-app), 0 0 0 4px var(--primary);
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

@@ -10,6 +10,21 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700&display=swap" rel="stylesheet" />
 
+        <!-- Anti-flash theme bootstrapper -->
+        <script>
+            (function () {
+                try {
+                    var saved = localStorage.getItem('lifeloop_theme');
+                    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    if (saved === 'dark' || (!saved && prefersDark)) {
+                        document.documentElement.classList.add('dark');
+                    } else {
+                        document.documentElement.classList.remove('dark');
+                    }
+                } catch (e) {}
+            })();
+        </script>
+
         <!-- Scripts & Styles -->
         @vite(['resources/css/app.css', 'resources/js/app.ts'])
         @inertiaHead

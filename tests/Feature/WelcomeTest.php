@@ -9,7 +9,7 @@ class WelcomeTest extends TestCase
 {
     public function test_welcome_page_renders_with_inertia(): void
     {
-        $response = $this->get('/');
+        $response = $this->get('/foundation');
 
         $response->assertStatus(200);
         $response->assertInertia(fn (Assert $page) => $page

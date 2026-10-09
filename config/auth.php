@@ -39,6 +39,7 @@ return [
         'web' => [
             'driver' => 'session',
             'provider' => 'users',
+            'remember' => (int) env('SESSION_LIFETIME', 1440),
         ],
     ],
 

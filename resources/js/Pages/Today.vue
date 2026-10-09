@@ -35,7 +35,17 @@ const toast = useToast();
 const currentNav = ref('today');
 const activeView = ref<'schedule' | 'empty' | 'loading'>('schedule');
 
-// Today's Date & Greeting
+import { usePage } from '@inertiajs/vue3';
+
+const page = usePage();
+const userName = computed(() => {
+    const user = (page.props.auth as any)?.user;
+    if (user?.name) {
+        return user.name.trim().split(/\s+/)[0];
+    }
+    return 'Friend';
+});
+
 const todayFormatted = computed(() => {
     return new Intl.DateTimeFormat('en-US', {
         weekday: 'long',
@@ -209,7 +219,7 @@ function submitExtraWork() {
 
         <!-- Page Header -->
         <PageHeader
-            :title="`${greeting}, Alex`"
+            :title="`${greeting}, ${userName}`"
             :subtitle="`${todayFormatted} • Focus Mode`"
         >
             <template #actions>

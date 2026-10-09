@@ -3,6 +3,7 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="csrf-token" content="{{ csrf_token() }}">
 
         <title inertia>{{ config('app.name', 'LifeLoop') }}</title>
 
@@ -31,5 +32,6 @@
     </head>
     <body class="font-sans antialiased bg-slate-50 text-slate-900 min-h-screen">
         @inertia
+        <script data-page="app" type="application/json">{!! json_encode($page) !!}</script>
     </body>
 </html>

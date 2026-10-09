@@ -11,10 +11,24 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        $middleware->web(append: [
+        $middleware->web(prepend: [
+            \App\Http\Middleware\EnsureCanonicalHost::class,
+        ], append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
+        ]);
+
+        $middleware->alias([
+            'verified.otp' => \App\Http\Middleware\EnsureEmailIsOtpVerified::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->respond(function (\Symfony\Component\HttpFoundation\Response $response, \Throwable $exception, \Illuminate\Http\Request $request) {
+            if ($response->getStatusCode() === 419) {
+                return back()->with([
+                    'error' => 'Your session expired. Please try again.',
+                ]);
+            }
+
+            return $response;
+        });
     })->create();

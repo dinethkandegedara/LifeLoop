@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, watch } from 'vue';
+import { Link, useForm, usePage } from '@inertiajs/vue3';
 import AppSidebar from './AppSidebar.vue';
 import AppHeader from './AppHeader.vue';
 import ToastContainer from '@/Components/ui/ToastContainer.vue';
 import Icon from '@/Components/ui/Icon.vue';
 import IconButton from '@/Components/ui/IconButton.vue';
 import ThemeToggle from '@/Components/ui/ThemeToggle.vue';
+import { useToast } from '@/composables/useToast';
 
 const props = withDefaults(
     defineProps<{
@@ -20,12 +22,38 @@ const emit = defineEmits<{
     (e: 'navigate', tab: string): void;
 }>();
 
+const page = usePage();
+const toast = useToast();
+const logoutForm = useForm({});
+
+const user = computed(() => (page.props.auth as any)?.user);
 const mobileMenuOpen = ref(false);
 
 function handleNavigate(tab: string) {
     emit('navigate', tab);
     mobileMenuOpen.value = false;
 }
+
+function logout() {
+    logoutForm.post('/logout');
+}
+
+// Watch for flash notifications
+watch(
+    () => page.props.flash,
+    (flash: any) => {
+        if (flash?.success) {
+            toast.success(flash.success);
+        }
+        if (flash?.error) {
+            toast.danger(flash.error);
+        }
+        if (flash?.info) {
+            toast.info(flash.info);
+        }
+    },
+    { immediate: true, deep: true }
+);
 </script>
 
 <template>
@@ -57,12 +85,12 @@ function handleNavigate(tab: string) {
                     <!-- Drawer panel -->
                     <div class="relative w-72 max-w-[80vw] bg-surface border-r border-border-subtle h-full p-4 flex flex-col shadow-2xl z-10">
                         <div class="flex items-center justify-between pb-4 border-b border-border-subtle mb-4">
-                            <div class="flex items-center gap-2">
+                            <Link href="/" class="flex items-center gap-2" @click="mobileMenuOpen = false">
                                 <div class="w-7 h-7 rounded-lg bg-primary-subdued text-primary border border-primary/25 flex items-center justify-center font-bold text-xs">
                                     LL
                                 </div>
                                 <span class="font-bold text-sm text-content-primary">LifeLoop</span>
-                            </div>
+                            </Link>
                             <IconButton
                                 icon="x"
                                 label="Close menu"
@@ -93,9 +121,38 @@ function handleNavigate(tab: string) {
                                 <Icon :name="item.icon" :size="18" />
                                 <span>{{ item.label }}</span>
                             </button>
+
+                            <Link
+                                href="/settings"
+                                @click="mobileMenuOpen = false"
+                                :class="[
+                                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer text-left',
+                                    currentTab === 'settings'
+                                        ? 'bg-primary-subdued text-primary font-semibold'
+                                        : 'text-content-secondary hover:text-content-primary hover:bg-surface-hover',
+                                ]"
+                            >
+                                <Icon name="settings" :size="18" />
+                                <span>Settings</span>
+                            </Link>
                         </nav>
 
-                        <div class="pt-4 border-t border-border-subtle flex flex-col gap-3">
+                        <!-- Mobile User Info & Logout -->
+                        <div v-if="user" class="py-3 border-t border-border-subtle flex items-center justify-between text-xs">
+                            <div class="min-w-0 pr-2">
+                                <p class="font-semibold text-content-primary truncate">{{ user.name }}</p>
+                                <p class="text-[10px] text-content-muted truncate">{{ user.timezone }}</p>
+                            </div>
+                            <button
+                                type="button"
+                                @click="logout"
+                                class="text-status-danger font-medium hover:underline shrink-0"
+                            >
+                                Sign out
+                            </button>
+                        </div>
+
+                        <div class="pt-3 border-t border-border-subtle flex flex-col gap-2">
                             <span class="text-xs font-medium text-content-secondary">Theme</span>
                             <ThemeToggle variant="segmented" />
                         </div>

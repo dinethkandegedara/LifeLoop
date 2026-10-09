@@ -9,10 +9,12 @@ const props = withDefaults(
         label?: string;
         description?: string;
         disabled?: boolean;
+        strikethrough?: boolean;
     }>(),
     {
         modelValue: false,
         disabled: false,
+        strikethrough: false,
     }
 );
 
@@ -22,16 +24,16 @@ const emit = defineEmits<{
 
 const checkboxId = computed(() => props.id || `checkbox-${Math.random().toString(36).substring(2, 7)}`);
 
-function toggle() {
+function handleChange(event: Event) {
     if (!props.disabled) {
-        emit('update:modelValue', !props.modelValue);
+        const target = event.target as HTMLInputElement;
+        emit('update:modelValue', target.checked);
     }
 }
 </script>
 
 <template>
     <label
-        :for="checkboxId"
         :class="[
             'inline-flex items-start gap-3 select-none cursor-pointer',
             disabled ? 'opacity-50 cursor-not-allowed' : '',
@@ -43,7 +45,7 @@ function toggle() {
                 type="checkbox"
                 :checked="modelValue"
                 :disabled="disabled"
-                @change="toggle"
+                @change="handleChange"
                 class="sr-only"
             />
             <div
@@ -64,7 +66,7 @@ function toggle() {
                 v-if="label"
                 :class="[
                     'font-medium text-content-primary',
-                    modelValue ? 'line-through text-content-muted' : '',
+                    modelValue && strikethrough ? 'line-through text-content-muted' : '',
                 ]"
             >
                 {{ label }}

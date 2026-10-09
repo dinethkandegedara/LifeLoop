@@ -10,16 +10,16 @@ defineProps<{
 </script>
 
 <template>
-    <Head title="Schedule Tracker - Foundations" />
+    <Head title="LifeLoop - Foundations" />
 
     <div class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-slate-100 flex flex-col justify-between p-6 sm:p-12">
         <header class="max-w-6xl w-full mx-auto flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 font-bold shadow-lg shadow-indigo-500/10">
-                    ST
+                    LL
                 </div>
                 <div>
-                    <h1 class="text-lg font-semibold tracking-tight text-white">Schedule Tracker</h1>
+                    <h1 class="text-lg font-semibold tracking-tight text-white">LifeLoop</h1>
                     <p class="text-xs text-slate-400">Foundation Ready</p>
                 </div>
             </div>
@@ -35,7 +35,7 @@ defineProps<{
                     Milestone 1: Application Foundation
                 </div>
                 <h2 class="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-4">
-                    Schedule Tracker Architecture Verified
+                    LifeLoop Architecture Verified
                 </h2>
                 <p class="text-slate-300 leading-relaxed mb-8 max-w-2xl">
                     Lightweight, multi-user personal scheduling and actual-work tracking platform engineered for conventional PHP shared hosting and high-fidelity reactive UX.
@@ -70,7 +70,7 @@ defineProps<{
         </main>
 
         <footer class="max-w-6xl w-full mx-auto text-center sm:text-left text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-800/60 pt-6">
-            <p>Schedule Tracker &bull; Same-Origin Shared Hosting Architecture</p>
+            <p>LifeLoop &bull; Same-Origin Shared Hosting Architecture</p>
             <p>Ready for Authentication & Work Tracking Domains</p>
         </footer>
     </div>

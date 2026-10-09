@@ -1,4 +1,5 @@
 {
+    "name": "lifeloop",
     "private": true,
     "type": "module",
     "scripts": {

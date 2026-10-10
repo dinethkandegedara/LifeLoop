@@ -131,6 +131,13 @@ const iconSize = computed(() => {
             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
         </g>
 
+        <!-- Chart / Reports -->
+        <g v-else-if="name === 'chart' || name === 'bar-chart'">
+            <line x1="18" x2="18" y1="20" y2="10" />
+            <line x1="12" x2="12" y1="20" y2="4" />
+            <line x1="6" x2="6" y1="20" y2="14" />
+        </g>
+
         <!-- Sparkles -->
         <g v-else-if="name === 'sparkles'">
             <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" />

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
+import AppLogo from '@/Components/ui/AppLogo.vue';
 
 defineProps<{
     status?: string;
@@ -14,15 +15,7 @@ defineProps<{
 
     <div class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-slate-100 flex flex-col justify-between p-6 sm:p-12">
         <header class="max-w-6xl w-full mx-auto flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 font-bold shadow-lg shadow-indigo-500/10">
-                    LL
-                </div>
-                <div>
-                    <h1 class="text-lg font-semibold tracking-tight text-white">LifeLoop</h1>
-                    <p class="text-xs text-slate-400">Foundation Ready</p>
-                </div>
-            </div>
+            <AppLogo variant="icon-text" size="lg" show-subtitle subtitle="Foundation Ready" class="[&_span]:text-white [&_span.text-content-muted]:text-slate-400" />
             <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                 <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span>System Operational</span>

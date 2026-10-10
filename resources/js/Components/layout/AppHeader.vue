@@ -2,6 +2,7 @@
 import Icon from '@/Components/ui/Icon.vue';
 import IconButton from '@/Components/ui/IconButton.vue';
 import ThemeToggle from '@/Components/ui/ThemeToggle.vue';
+import AppLogo from '@/Components/ui/AppLogo.vue';
 
 defineProps<{
     currentTitle?: string;
@@ -23,14 +24,7 @@ const emit = defineEmits<{
                 size="sm"
                 @click="emit('toggle-menu')"
             />
-            <div class="flex items-center gap-2">
-                <div
-                    class="w-6 h-6 rounded-md bg-primary-subdued text-primary border border-primary/25 flex items-center justify-center font-bold text-xs"
-                >
-                    LL
-                </div>
-                <span class="font-bold text-sm text-content-primary">LifeLoop</span>
-            </div>
+            <AppLogo variant="icon-text" size="sm" />
         </div>
 
         <div class="flex items-center gap-2">

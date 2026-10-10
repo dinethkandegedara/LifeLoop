@@ -1132,6 +1132,17 @@ function formatSingleRuleDescription(sched: TaskSchedule): string {
                         Edit
                     </Button>
 
+                    <!-- View Task Report Action -->
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon="chart"
+                        @click="router.visit(`/tasks/${task.id}/report`)"
+                        title="View task execution and performance report"
+                    >
+                        Report
+                    </Button>
+
                     <!-- Archive / Unarchive Action -->
                     <Button
                         variant="ghost"

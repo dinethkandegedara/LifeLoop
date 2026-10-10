@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import Icon from '@/Components/ui/Icon.vue';
 import ThemeToggle from '@/Components/ui/ThemeToggle.vue';
+import AppLogo from '@/Components/ui/AppLogo.vue';
 
 const props = defineProps<{
     currentTab: string;
@@ -28,6 +29,7 @@ const navItems = [
     { id: 'today', label: 'Today', icon: 'clock', badge: '3', href: '/' },
     { id: 'week', label: 'Week', icon: 'calendar', href: '/' },
     { id: 'month', label: 'Month', icon: 'calendar', href: '/' },
+    { id: 'reports', label: 'Reports', icon: 'chart', href: '/reports' },
     { id: 'tasks', label: 'All Tasks', icon: 'tasks', href: '/tasks' },
 ];
 
@@ -46,16 +48,8 @@ function logout() {
     >
         <!-- App Logo & Branding -->
         <div class="h-16 px-6 flex items-center gap-3 border-b border-border-subtle">
-            <Link href="/" class="flex items-center gap-3 group">
-                <div
-                    class="w-8 h-8 rounded-lg bg-primary-subdued text-primary border border-primary/25 flex items-center justify-center font-bold text-sm tracking-tight shadow-xs group-hover:scale-105 transition-transform"
-                >
-                    LL
-                </div>
-                <div>
-                    <span class="font-bold text-base tracking-tight text-content-primary">LifeLoop</span>
-                    <span class="block text-[10px] text-content-muted leading-none font-medium">Productivity & Flow</span>
-                </div>
+            <Link href="/" class="group">
+                <AppLogo variant="icon-text" size="md" show-subtitle />
             </Link>
         </div>
 

@@ -4,6 +4,7 @@ import Card from '@/Components/ui/Card.vue';
 import Input from '@/Components/ui/Input.vue';
 import Button from '@/Components/ui/Button.vue';
 import ThemeToggle from '@/Components/ui/ThemeToggle.vue';
+import AppLogo from '@/Components/ui/AppLogo.vue';
 
 const props = defineProps<{
     email?: string;
@@ -31,11 +32,8 @@ function submit() {
     <div class="min-h-screen bg-app flex flex-col justify-between p-6 sm:p-10 select-none antialiased">
         <!-- Top bar -->
         <header class="max-w-md w-full mx-auto flex items-center justify-between">
-            <Link href="/" class="flex items-center gap-2.5 group">
-                <div class="w-8 h-8 rounded-lg bg-primary-subdued text-primary border border-primary/25 flex items-center justify-center font-bold text-sm tracking-tight shadow-xs group-hover:scale-105 transition-transform">
-                    LL
-                </div>
-                <span class="font-bold text-base tracking-tight text-content-primary">LifeLoop</span>
+            <Link href="/" class="group">
+                <AppLogo variant="icon-text" size="md" />
             </Link>
 
             <ThemeToggle variant="button" />
@@ -45,6 +43,9 @@ function submit() {
         <main class="w-full max-w-md mx-auto my-auto py-8">
             <Card class="shadow-xl">
                 <div class="text-center mb-6">
+                    <div class="flex justify-center mb-3">
+                        <AppLogo variant="mark" size="lg" />
+                    </div>
                     <h1 class="text-xl font-bold tracking-tight text-content-primary">
                         Set new password
                     </h1>

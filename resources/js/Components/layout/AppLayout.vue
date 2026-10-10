@@ -7,6 +7,7 @@ import ToastContainer from '@/Components/ui/ToastContainer.vue';
 import Icon from '@/Components/ui/Icon.vue';
 import IconButton from '@/Components/ui/IconButton.vue';
 import ThemeToggle from '@/Components/ui/ThemeToggle.vue';
+import AppLogo from '@/Components/ui/AppLogo.vue';
 import { useToast } from '@/composables/useToast';
 
 const props = withDefaults(
@@ -36,8 +37,12 @@ function handleNavigate(tab: string) {
         if (props.currentTab !== 'tasks') {
             router.visit('/tasks');
         }
+    } else if (tab === 'reports') {
+        if (props.currentTab !== 'reports') {
+            router.visit('/reports');
+        }
     } else if (['today', 'week', 'month'].includes(tab)) {
-        if (props.currentTab === 'tasks' || props.currentTab === 'settings') {
+        if (props.currentTab === 'tasks' || props.currentTab === 'settings' || props.currentTab === 'reports') {
             router.visit(tab === 'today' ? '/' : `/?view=${tab}`);
         } else {
             emit('navigate', tab);
@@ -99,11 +104,8 @@ watch(
                     <!-- Drawer panel -->
                     <div class="relative w-72 max-w-[80vw] bg-surface border-r border-border-subtle h-full p-4 flex flex-col shadow-2xl z-10">
                         <div class="flex items-center justify-between pb-4 border-b border-border-subtle mb-4">
-                            <Link href="/" class="flex items-center gap-2" @click="mobileMenuOpen = false">
-                                <div class="w-7 h-7 rounded-lg bg-primary-subdued text-primary border border-primary/25 flex items-center justify-center font-bold text-xs">
-                                    LL
-                                </div>
-                                <span class="font-bold text-sm text-content-primary">LifeLoop</span>
+                            <Link href="/" class="group" @click="mobileMenuOpen = false">
+                                <AppLogo variant="icon-text" size="sm" />
                             </Link>
                             <IconButton
                                 icon="x"
@@ -120,6 +122,7 @@ watch(
                                     { id: 'today', label: 'Today', icon: 'clock' },
                                     { id: 'week', label: 'Week', icon: 'calendar' },
                                     { id: 'month', label: 'Month', icon: 'calendar' },
+                                    { id: 'reports', label: 'Reports', icon: 'chart' },
                                     { id: 'tasks', label: 'All Tasks', icon: 'tasks' },
                                 ]"
                                 :key="item.id"

@@ -13,8 +13,8 @@
                     <!-- Header -->
                     <tr>
                         <td style="padding: 32px 32px 24px; text-align: center;">
-                            <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; border-radius: 12px; background-color: rgba(155, 138, 251, 0.15); color: #8874f9; font-weight: 700; font-size: 18px; margin-bottom: 16px;">
-                                LL
+                            <div style="margin-bottom: 20px; text-align: center;">
+                                <img src="{{ config('app.url') }}/brand/logo-light.png" alt="LifeLoop" height="36" style="height: 36px; max-width: 180px; object-fit: contain; display: inline-block;" />
                             </div>
                             <h1 style="margin: 0; font-size: 20px; font-weight: 700; color: #111827; letter-spacing: -0.02em;">
                                 @if($purpose === 'password_reset')

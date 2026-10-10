@@ -62,6 +62,10 @@ Route::middleware(['auth', 'verified.otp'])->group(function () {
         return app(TodayController::class)($request, $manager);
     })->name('calendar.month');
 
+    // Reporting
+    Route::get('/reports', [\App\Http\Controllers\ReportController::class, 'index'])->name('reports.index');
+    Route::get('/tasks/{task}/report', [\App\Http\Controllers\ReportController::class, 'taskReport'])->name('tasks.report');
+
     Route::get('/settings', [SettingsController::class, 'edit'])->name('settings.edit');
     Route::put('/settings', [SettingsController::class, 'update'])->name('settings.update');
 

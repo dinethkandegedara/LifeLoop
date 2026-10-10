@@ -26,23 +26,47 @@ class ScheduleReportingService
         User $user,
         string $period = 'week',
         ?Carbon $customStart = null,
-        ?Carbon $customEnd = null
+        ?Carbon $customEnd = null,
+        ?Carbon $anchorDate = null
     ): array {
         $tz = $user->timezone ?: 'UTC';
         $today = now($tz)->startOfDay();
+        $target = $anchorDate ? $anchorDate->copy()->setTimezone($tz)->startOfDay() : $today->copy();
 
         switch ($period) {
             case 'today':
-                $start = $today->copy();
-                $end = $today->copy()->endOfDay();
-                $label = 'Today (' . $start->format('M d, Y') . ')';
+                $start = $target->copy();
+                $end = $target->copy()->endOfDay();
+                if ($start->toDateString() === $today->toDateString()) {
+                    $label = 'Today (' . $start->format('M d, Y') . ')';
+                } elseif ($start->toDateString() === $today->copy()->subDay()->toDateString()) {
+                    $label = 'Yesterday (' . $start->format('M d, Y') . ')';
+                } else {
+                    $label = $start->format('D, M d, Y');
+                }
+                $isCurrent = $start->toDateString() === $today->toDateString();
+                $prevDate = $target->copy()->subDay()->toDateString();
+                $nextDate = $target->copy()->addDay()->toDateString();
+                $canGoNext = $target->copy()->addDay()->lte($today);
                 break;
 
             case 'month':
-                $start = $today->copy()->startOfMonth();
-                $monthEnd = $today->copy()->endOfMonth();
-                $end = $today->isBefore($monthEnd) ? $today->copy()->endOfDay() : $monthEnd;
-                $label = $start->format('F Y') . ($today->isBefore($monthEnd) ? ' (To Date: ' . $start->format('M d') . ' – ' . $end->format('M d') . ')' : '');
+                $start = $target->copy()->startOfMonth();
+                $monthEnd = $target->copy()->endOfMonth();
+                $isCurrentMonth = $start->format('Y-m') === $today->format('Y-m');
+
+                if ($isCurrentMonth && $today->isBefore($monthEnd)) {
+                    $end = $today->copy()->endOfDay();
+                    $label = $start->format('F Y') . ' (To Date: ' . $start->format('M d') . ' – ' . $end->format('M d') . ')';
+                } else {
+                    $end = $monthEnd;
+                    $label = $start->format('F Y');
+                }
+
+                $isCurrent = $isCurrentMonth;
+                $prevDate = $target->copy()->subMonth()->toDateString();
+                $nextDate = $target->copy()->addMonth()->toDateString();
+                $canGoNext = $target->copy()->addMonth()->startOfMonth()->lte($today);
                 break;
 
             case 'all':
@@ -50,22 +74,45 @@ class ScheduleReportingService
                 $start = $today->copy()->subYear()->startOfDay();
                 $end = $today->copy()->endOfDay();
                 $label = 'All Time';
+                $isCurrent = true;
+                $prevDate = null;
+                $nextDate = null;
+                $canGoNext = false;
                 break;
 
             case 'custom':
                 $start = $customStart ? $customStart->copy()->setTimezone($tz)->startOfDay() : $today->copy()->startOfWeek();
                 $end = $customEnd ? $customEnd->copy()->setTimezone($tz)->endOfDay() : $today->copy()->endOfWeek();
                 $label = $start->format('M d, Y') . ' – ' . $end->format('M d, Y');
+                $isCurrent = false;
+                $prevDate = null;
+                $nextDate = null;
+                $canGoNext = false;
                 break;
 
             case 'week':
             default:
                 // Monday to Sunday standard week
-                $start = $today->copy()->startOfWeek();
-                $weekEnd = $today->copy()->endOfWeek();
-                $end = $today->isBefore($weekEnd) ? $today->copy()->endOfDay() : $weekEnd;
-                $label = 'This Week (' . $start->format('M d') . ($start->toDateString() !== $end->toDateString() ? ' – ' . $end->format('M d, Y') : ', ' . $start->format('Y')) . ')';
+                $start = $target->copy()->startOfWeek();
+                $weekEnd = $target->copy()->endOfWeek();
+                $isCurrentWeek = $start->lte($today) && $today->lte($weekEnd);
+
+                if ($isCurrentWeek && $today->isBefore($weekEnd)) {
+                    $end = $today->copy()->endOfDay();
+                    $label = 'This Week (' . $start->format('M d') . ($start->toDateString() !== $end->toDateString() ? ' – ' . $end->format('M d, Y') : ', ' . $start->format('Y')) . ')';
+                } elseif ($start->toDateString() === $today->copy()->subWeek()->startOfWeek()->toDateString()) {
+                    $end = $weekEnd;
+                    $label = 'Last Week (' . $start->format('M d') . ' – ' . $end->format('M d, Y') . ')';
+                } else {
+                    $end = $weekEnd;
+                    $label = 'Week of ' . $start->format('M d') . ' – ' . $end->format('M d, Y');
+                }
+
                 $period = 'week';
+                $isCurrent = $isCurrentWeek;
+                $prevDate = $target->copy()->subWeek()->toDateString();
+                $nextDate = $target->copy()->addWeek()->toDateString();
+                $canGoNext = $target->copy()->addWeek()->startOfWeek()->lte($today);
                 break;
         }
 
@@ -74,6 +121,11 @@ class ScheduleReportingService
             'end' => $end,
             'label' => $label,
             'period' => $period,
+            'anchor_date' => $target->toDateString(),
+            'is_current' => $isCurrent,
+            'prev_date' => $prevDate,
+            'next_date' => $nextDate,
+            'can_go_next' => $canGoNext,
         ];
     }
 
@@ -370,9 +422,10 @@ class ScheduleReportingService
         string $period = 'week',
         ?Carbon $customStart = null,
         ?Carbon $customEnd = null,
-        ?int $taskId = null
+        ?int $taskId = null,
+        ?Carbon $anchorDate = null
     ): array {
-        $bounds = $this->getPeriodBoundaries($user, $period, $customStart, $customEnd);
+        $bounds = $this->getPeriodBoundaries($user, $period, $customStart, $customEnd, $anchorDate);
         $metrics = $this->getMetrics($user, $bounds['start'], $bounds['end'], $taskId);
 
         // Daily trends for this period (if period length <= 31 days)
@@ -407,6 +460,11 @@ class ScheduleReportingService
             'period_label' => $bounds['label'],
             'start_date' => $bounds['start']->toDateString(),
             'end_date' => $bounds['end']->toDateString(),
+            'anchor_date' => $bounds['anchor_date'],
+            'is_current' => $bounds['is_current'],
+            'prev_date' => $bounds['prev_date'],
+            'next_date' => $bounds['next_date'],
+            'can_go_next' => $bounds['can_go_next'],
             'metrics' => $metrics,
             'daily_trends' => $dailyTrends,
             'task_summaries' => $taskSummaries,
@@ -426,9 +484,10 @@ class ScheduleReportingService
         string $period = 'month',
         ?Carbon $customStart = null,
         ?Carbon $customEnd = null,
-        ?string $statusFilter = null
+        ?string $statusFilter = null,
+        ?Carbon $anchorDate = null
     ): array {
-        $bounds = $this->getPeriodBoundaries($user, $period, $customStart, $customEnd);
+        $bounds = $this->getPeriodBoundaries($user, $period, $customStart, $customEnd, $anchorDate);
         $metrics = $this->getMetrics($user, $bounds['start'], $bounds['end'], $task->id);
 
         // Daily trends (last 14 days or period)
@@ -475,6 +534,11 @@ class ScheduleReportingService
             'period_label' => $bounds['label'],
             'start_date' => $bounds['start']->toDateString(),
             'end_date' => $bounds['end']->toDateString(),
+            'anchor_date' => $bounds['anchor_date'],
+            'is_current' => $bounds['is_current'],
+            'prev_date' => $bounds['prev_date'],
+            'next_date' => $bounds['next_date'],
+            'can_go_next' => $bounds['can_go_next'],
             'status_filter' => $statusFilter ?: 'all',
             'metrics' => $metrics,
             'daily_trends' => $dailyTrends,

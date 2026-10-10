@@ -41,12 +41,17 @@ class ReportController extends Controller
 
         $taskId = $request->filled('task_id') ? (int) $request->input('task_id') : null;
 
+        $anchorDate = $request->filled('date')
+            ? Carbon::parse($request->input('date'), $tz)
+            : null;
+
         $reportData = $this->reportingService->getOverviewReport(
             $user,
             $period,
             $customStart,
             $customEnd,
-            $taskId
+            $taskId,
+            $anchorDate
         );
 
         return Inertia::render('Reports/Index', $reportData);
@@ -77,13 +82,18 @@ class ReportController extends Controller
 
         $statusFilter = $request->input('status');
 
+        $anchorDate = $request->filled('date')
+            ? Carbon::parse($request->input('date'), $tz)
+            : null;
+
         $taskReportData = $this->reportingService->getTaskReport(
             $user,
             $task,
             $period,
             $customStart,
             $customEnd,
-            $statusFilter
+            $statusFilter,
+            $anchorDate
         );
 
         return Inertia::render('Reports/TaskReport', $taskReportData);

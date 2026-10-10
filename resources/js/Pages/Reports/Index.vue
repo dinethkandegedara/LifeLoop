@@ -68,6 +68,11 @@ const props = defineProps<{
     period_label: string;
     start_date: string;
     end_date: string;
+    anchor_date?: string;
+    is_current?: boolean;
+    prev_date?: string | null;
+    next_date?: string | null;
+    can_go_next?: boolean;
     metrics: Metrics;
     daily_trends: DailyTrend[];
     task_summaries: TaskSummary[];
@@ -88,10 +93,15 @@ const taskFilterOptions = computed<SelectOption[]>(() => {
     ];
 });
 
-function applyFilters() {
+function applyFilters(targetDate?: string | null) {
     const params: Record<string, any> = {
         period: selectedPeriod.value,
     };
+    if (targetDate) {
+        params.date = targetDate;
+    } else if (props.anchor_date && selectedPeriod.value !== 'custom') {
+        params.date = props.anchor_date;
+    }
     if (selectedTaskId.value) {
         params.task_id = selectedTaskId.value;
     }
@@ -112,12 +122,35 @@ function handlePeriodChange(p: string) {
         showCustomRange.value = true;
     } else {
         showCustomRange.value = false;
-        applyFilters();
+        applyFilters(props.anchor_date || null);
     }
 }
 
 function handleTaskFilterChange() {
-    applyFilters();
+    applyFilters(props.anchor_date || null);
+}
+
+function navigatePeriod(targetDate: string | null | undefined) {
+    if (!targetDate) return;
+    applyFilters(targetDate);
+}
+
+function handleDirectDateChange(dateStr: string) {
+    if (!dateStr) return;
+    applyFilters(dateStr);
+}
+
+function resetToCurrent() {
+    const params: Record<string, any> = {
+        period: selectedPeriod.value,
+    };
+    if (selectedTaskId.value) {
+        params.task_id = selectedTaskId.value;
+    }
+    router.get('/reports', params, {
+        preserveState: true,
+        preserveScroll: true,
+    });
 }
 
 // Max value helper for trend charts
@@ -136,7 +169,7 @@ const maxTrendValue = computed(() => {
 
     <AppLayout current-tab="reports">
         <!-- TOP CONTROLS & HEADER -->
-        <div class="space-y-6 mb-8">
+        <div class="space-y-4 mb-8">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div class="flex items-center gap-3 flex-wrap">
                     <SegmentedControl
@@ -166,6 +199,66 @@ const maxTrendValue = computed(() => {
                 </div>
             </div>
 
+            <!-- Previous / Next Period Navigation Bar (For Today, Week, Month) -->
+            <div
+                v-if="selectedPeriod !== 'custom'"
+                class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-surface border border-border-subtle shadow-xs"
+            >
+                <div class="flex items-center gap-2">
+                    <button
+                        type="button"
+                        @click="navigatePeriod(props.prev_date)"
+                        :disabled="!props.prev_date"
+                        class="p-1.5 rounded-lg border border-border-subtle bg-surface-subdued text-content-secondary hover:text-content-primary hover:border-border-strong disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                        :title="'Previous ' + (selectedPeriod === 'today' ? 'Day' : selectedPeriod === 'week' ? 'Week' : 'Month')"
+                    >
+                        <Icon name="chevron-left" :size="16" />
+                    </button>
+
+                    <button
+                        type="button"
+                        @click="navigatePeriod(props.next_date)"
+                        :disabled="!props.can_go_next || !props.next_date"
+                        class="p-1.5 rounded-lg border border-border-subtle bg-surface-subdued text-content-secondary hover:text-content-primary hover:border-border-strong disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                        :title="'Next ' + (selectedPeriod === 'today' ? 'Day' : selectedPeriod === 'week' ? 'Week' : 'Month')"
+                    >
+                        <Icon name="chevron-right" :size="16" />
+                    </button>
+
+                    <button
+                        v-if="!props.is_current"
+                        type="button"
+                        @click="resetToCurrent"
+                        class="px-2.5 py-1 text-xs font-semibold rounded-lg border border-primary/20 bg-primary/10 text-primary hover:bg-primary/20 transition-all cursor-pointer"
+                    >
+                        Jump to Current
+                    </button>
+                </div>
+
+                <!-- Active Period Display & Direct Jump Picker -->
+                <div class="flex items-center gap-2.5">
+                    <span class="text-xs sm:text-sm font-semibold text-content-primary">
+                        {{ props.period_label }}
+                    </span>
+                    <Badge v-if="props.is_current" variant="primary" size="sm">Current</Badge>
+                    <Badge v-else variant="neutral" size="sm">Past Archive</Badge>
+
+                    <!-- Direct Date Jump Input -->
+                    <div class="relative ml-1">
+                        <input
+                            type="date"
+                            :value="props.anchor_date || props.start_date"
+                            @change="handleDirectDateChange(($event.target as HTMLInputElement).value)"
+                            class="w-8 h-8 rounded-lg bg-surface-subdued text-transparent border border-border-subtle hover:border-border-strong cursor-pointer outline-none transition-colors"
+                            title="Jump directly to specific date"
+                        />
+                        <span class="absolute inset-0 flex items-center justify-center pointer-events-none text-content-muted">
+                            <Icon name="calendar" :size="14" />
+                        </span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Custom Date Range Bar (if custom selected) -->
             <div
                 v-if="selectedPeriod === 'custom' || showCustomRange"
@@ -190,7 +283,7 @@ const maxTrendValue = computed(() => {
                 <Button
                     variant="primary"
                     size="sm"
-                    @click="applyFilters"
+                    @click="applyFilters()"
                 >
                     Apply Range
                 </Button>

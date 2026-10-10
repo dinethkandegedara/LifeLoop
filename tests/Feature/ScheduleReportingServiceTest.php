@@ -329,4 +329,49 @@ class ScheduleReportingServiceTest extends TestCase
         $unauthorizedResponse = $this->actingAs($otherUser)->get("/tasks/{$task->id}/report");
         $unauthorizedResponse->assertStatus(403);
     }
+
+    public function test_navigation_to_previous_dates_weeks_and_months(): void
+    {
+        $user = User::factory()->create(['timezone' => 'UTC']);
+        $task = Task::factory()->create(['user_id' => $user->id]);
+
+        // 1. Previous week navigation
+        $pastWeekResponse = $this->actingAs($user)->get('/reports?period=week&date=2026-09-15');
+        $pastWeekResponse->assertStatus(200);
+        $pastWeekResponse->assertInertia(fn (Assert $page) => $page
+            ->component('Reports/Index')
+            ->where('period', 'week')
+            ->where('anchor_date', '2026-09-15')
+            ->where('is_current', false)
+            ->where('prev_date', '2026-09-08')
+            ->where('next_date', '2026-09-22')
+            ->has('metrics')
+        );
+
+        // 2. Previous month navigation
+        $pastMonthResponse = $this->actingAs($user)->get('/reports?period=month&date=2026-08-10');
+        $pastMonthResponse->assertStatus(200);
+        $pastMonthResponse->assertInertia(fn (Assert $page) => $page
+            ->component('Reports/Index')
+            ->where('period', 'month')
+            ->where('anchor_date', '2026-08-10')
+            ->where('is_current', false)
+            ->where('start_date', '2026-08-01')
+            ->where('end_date', '2026-08-31')
+            ->has('metrics')
+        );
+
+        // 3. Previous day navigation
+        $pastDayResponse = $this->actingAs($user)->get('/reports?period=today&date=2026-09-01');
+        $pastDayResponse->assertStatus(200);
+        $pastDayResponse->assertInertia(fn (Assert $page) => $page
+            ->component('Reports/Index')
+            ->where('period', 'today')
+            ->where('start_date', '2026-09-01')
+            ->where('end_date', '2026-09-01')
+            ->where('is_current', false)
+            ->where('prev_date', '2026-08-31')
+            ->where('next_date', '2026-09-02')
+        );
+    }
 }

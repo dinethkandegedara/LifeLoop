@@ -48,6 +48,7 @@ Route::middleware('auth')->group(function () {
 
 // Public read-only tokenized calendar subscription feed (.ics / webcal)
 Route::get('/calendar/feed/{token}.ics', [\App\Http\Controllers\CalendarFeedController::class, 'feed'])
+    ->middleware('throttle:60,1')
     ->name('calendar.feed');
 
 /*

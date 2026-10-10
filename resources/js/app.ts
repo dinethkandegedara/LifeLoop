@@ -24,25 +24,57 @@ if (typeof window !== 'undefined') {
 
 const appName = (import.meta.env.VITE_APP_NAME as string) || 'LifeLoop';
 
-const appElement = document.getElementById('app');
-const initialPage = appElement?.dataset.page
-    ? JSON.parse(appElement.dataset.page)
-    : undefined;
+function getInitialPage(): any {
+    // 1. Try div#app dataset.page (Inertia v1 / Laravel default)
+    const appElement = document.getElementById('app');
+    if (appElement?.dataset.page) {
+        try {
+            return JSON.parse(appElement.dataset.page);
+        } catch (e) {
+            console.error('Failed to parse #app dataset.page', e);
+        }
+    }
 
-createInertiaApp({
-    page: initialPage,
-    title: (title) => (title ? `${title} - ${appName}` : appName),
-    resolve: (name) =>
-        resolvePageComponent(
-            `./Pages/${name}.vue`,
-            import.meta.glob<DefineComponent>('./Pages/**/*.vue')
-        ),
-    setup({ el, App, props, plugin }) {
-        createApp({ render: () => h(App, props) })
-            .use(plugin)
-            .mount(el);
-    },
-    progress: {
-        color: '#4F46E5',
-    },
-});
+    // 2. Try JSON script tag (Inertia v2 format)
+    const script = document.querySelector<HTMLScriptElement>('script[data-page="app"]');
+    if (script?.textContent) {
+        try {
+            return JSON.parse(script.textContent);
+        } catch (e) {
+            console.error('Failed to parse script data-page', e);
+        }
+    }
+
+    return undefined;
+}
+
+function startInertiaApp() {
+    const initialPage = getInitialPage();
+
+    createInertiaApp({
+        page: initialPage,
+        title: (title) => (title ? `${title} - ${appName}` : appName),
+        resolve: (name) =>
+            resolvePageComponent(
+                `./Pages/${name}.vue`,
+                import.meta.glob<DefineComponent>('./Pages/**/*.vue')
+            ),
+        setup({ el, App, props, plugin }) {
+            const target = el || document.getElementById('app');
+            if (target) {
+                createApp({ render: () => h(App, props) })
+                    .use(plugin)
+                    .mount(target);
+            }
+        },
+        progress: {
+            color: '#4F46E5',
+        },
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startInertiaApp);
+} else {
+    startInertiaApp();
+}

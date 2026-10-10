@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Link, useForm, usePage } from '@inertiajs/vue3';
+import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import Icon from '@/Components/ui/Icon.vue';
 import ThemeToggle from '@/Components/ui/ThemeToggle.vue';
 
-defineProps<{
+const props = defineProps<{
     currentTab: string;
 }>();
 
@@ -28,8 +28,18 @@ const navItems = [
     { id: 'today', label: 'Today', icon: 'clock', badge: '3', href: '/' },
     { id: 'week', label: 'Week', icon: 'calendar', href: '/' },
     { id: 'month', label: 'Month', icon: 'calendar', href: '/' },
-    { id: 'tasks', label: 'All Tasks', icon: 'tasks', href: '/' },
+    { id: 'tasks', label: 'All Tasks', icon: 'tasks', href: '/tasks' },
 ];
+
+function handleItemClick(item: (typeof navItems)[number]) {
+    if (item.id === 'today' && props.currentTab !== 'today') {
+        router.visit('/');
+    } else if (item.id === 'tasks' && props.currentTab !== 'tasks') {
+        router.visit('/tasks');
+    } else {
+        emit('navigate', item.id);
+    }
+}
 
 function logout() {
     logoutForm.post('/logout');
@@ -61,7 +71,7 @@ function logout() {
                 v-for="item in navItems"
                 :key="item.id"
                 type="button"
-                @click="emit('navigate', item.id)"
+                @click="handleItemClick(item)"
                 :class="[
                     'w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer group',
                     currentTab === item.id

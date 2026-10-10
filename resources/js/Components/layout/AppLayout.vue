@@ -26,11 +26,19 @@ const page = usePage();
 const toast = useToast();
 const logoutForm = useForm({});
 
+import { router } from '@inertiajs/vue3';
+
 const user = computed(() => (page.props.auth as any)?.user);
 const mobileMenuOpen = ref(false);
 
 function handleNavigate(tab: string) {
-    emit('navigate', tab);
+    if (tab === 'today' && props.currentTab !== 'today') {
+        router.visit('/');
+    } else if (tab === 'tasks' && props.currentTab !== 'tasks') {
+        router.visit('/tasks');
+    } else {
+        emit('navigate', tab);
+    }
     mobileMenuOpen.value = false;
 }
 

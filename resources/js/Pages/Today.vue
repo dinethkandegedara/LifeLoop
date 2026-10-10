@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { Head } from '@inertiajs/vue3';
+import { ref, computed, watch } from 'vue';
+import { Head, usePage, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/layout/PageHeader.vue';
 import Card from '@/Components/ui/Card.vue';
@@ -30,14 +30,17 @@ interface ScheduledTask {
     isExtra?: boolean;
 }
 
+const page = usePage();
 const toast = useToast();
 
 const currentNav = ref('today');
 const activeView = ref<'schedule' | 'empty' | 'loading'>('schedule');
 
-import { usePage } from '@inertiajs/vue3';
-
-const page = usePage();
+watch(currentNav, (nav) => {
+    if (nav === 'tasks') {
+        router.visit('/tasks');
+    }
+});
 const userName = computed(() => {
     const user = (page.props.auth as any)?.user;
     if (user?.name) {

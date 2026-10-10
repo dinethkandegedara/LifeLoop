@@ -83,6 +83,17 @@ const props = withDefaults(
         rangeEnd?: string;
         rangeWorkSessions?: WorkSession[];
         overdueOccurrences?: ScheduleOccurrence[];
+        streak?: {
+            current_streak: number;
+            best_streak: number;
+            today_completion_rate: number;
+            today_qualified: boolean;
+            today_scheduled_count: number;
+            today_completed_count: number;
+            label: string;
+            subtext: string;
+            badge_name: string;
+        };
     }>(),
     {
         currentView: 'today',
@@ -569,6 +580,7 @@ function submitWorkSession() {
                 :selected-date="selectedDate"
                 :today-date="todayDate"
                 :action-loading-ids="actionLoadingIds"
+                :streak="streak"
                 @toggle-occurrence="toggleOccurrenceStatus"
                 @log-work-for-occurrence="openWorkModalForOccurrence"
                 @log-work-ad-hoc="openWorkModalAdHoc()"

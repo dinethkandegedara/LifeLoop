@@ -16,8 +16,12 @@ class TodayController extends Controller
      * Render the Calendar / Today focus view with real schedule occurrences and work sessions.
      * Supports Today, Week, and Month views with user timezone alignment and efficient range loading.
      */
-    public function __invoke(Request $request, ScheduleManager $manager): Response
-    {
+    public function __invoke(
+        Request $request,
+        ScheduleManager $manager,
+        ?\App\Services\Habits\StreakService $streakService = null
+    ): Response {
+        $streakService = $streakService ?: app(\App\Services\Habits\StreakService::class);
         $user = $request->user();
         $tz = $user->timezone ?: 'UTC';
         $today = now($tz)->startOfDay();
@@ -105,6 +109,7 @@ class TodayController extends Controller
             'rangeEnd' => $rangeEnd->toDateString(),
             'rangeWorkSessions' => $rangeWorkSessions,
             'overdueOccurrences' => $overdueOccurrences,
+            'streak' => $streakService->getStreakData($user),
         ]);
     }
 }

@@ -58,6 +58,18 @@ interface WorkSession {
     } | null;
 }
 
+interface StreakData {
+    current_streak: number;
+    best_streak: number;
+    today_completion_rate: number;
+    today_qualified: boolean;
+    today_scheduled_count: number;
+    today_completed_count: number;
+    label: string;
+    subtext: string;
+    badge_name: string;
+}
+
 const props = defineProps<{
     occurrences: ScheduleOccurrence[];
     todayWorkSessions: WorkSession[];
@@ -65,6 +77,7 @@ const props = defineProps<{
     selectedDate: string;
     todayDate: string;
     actionLoadingIds: Set<number>;
+    streak?: StreakData;
 }>();
 
 const emit = defineEmits<{
@@ -125,6 +138,46 @@ function formatMinutes(minutes: number): string {
 
 <template>
     <div class="space-y-6">
+        <!-- SUBTLE DAILY STREAK & CONSISTENCY HABIT BANNER -->
+        <div
+            v-if="streak"
+            class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-primary/5 to-surface border border-amber-500/25 shadow-xs"
+        >
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-500 dark:bg-amber-500/25 flex items-center justify-center font-bold shrink-0 shadow-xs">
+                    <Icon name="flame" :size="22" class="text-amber-500" />
+                </div>
+                <div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-xs font-bold text-content-primary">
+                            {{ streak.current_streak }} {{ streak.current_streak === 1 ? 'day' : 'days' }} in a row with &ge;80% completion
+                        </span>
+                        <Badge variant="primary" size="sm">
+                            {{ streak.badge_name }}
+                        </Badge>
+                    </div>
+                    <p class="text-[11px] text-content-muted mt-0.5">
+                        {{ streak.subtext }}
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 self-start sm:self-center shrink-0">
+                <div class="text-[11px] font-medium text-content-muted px-2.5 py-1 rounded-lg bg-surface border border-border-subtle shadow-2xs">
+                    Best: <span class="text-content-primary font-bold font-mono">{{ streak.best_streak }}d</span>
+                </div>
+                <Badge v-if="streak.today_qualified" variant="success" size="sm">
+                    Today Secured 🔥
+                </Badge>
+                <Badge v-else-if="streak.today_scheduled_count > 0" variant="neutral" size="sm">
+                    Today: {{ streak.today_completion_rate }}% (Goal: 80%)
+                </Badge>
+                <Badge v-else variant="neutral" size="sm">
+                    Rest / Active
+                </Badge>
+            </div>
+        </div>
+
         <!-- 4-METRIC SUMMARY ROW (Planned, Completed, Remaining, Actual) -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <!-- 1. Planned Hours -->

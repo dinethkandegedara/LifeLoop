@@ -111,6 +111,8 @@ class ScheduleOccurrenceController extends Controller
             'completed_at' => null,
         ]);
 
+        \App\Services\Reporting\ReportCacheService::invalidateUser($occurrence->user_id);
+
         if ($request->wantsJson()) {
             return response()->json([
                 'message' => 'Occurrence reopened successfully.',

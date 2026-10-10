@@ -7,6 +7,7 @@ use App\Models\ScheduleOccurrence;
 use App\Models\Task;
 use App\Models\User;
 use App\Models\WorkSession;
+use App\Services\Reporting\ReportCacheService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -46,6 +47,7 @@ class ScheduleManager
             ]);
 
             $this->generator->generate($schedule, $horizon);
+            ReportCacheService::invalidateUser($task->user_id);
 
             return $schedule->fresh(['occurrences']);
         });
@@ -99,6 +101,8 @@ class ScheduleManager
                 $this->generator->generate($schedule, $horizon, $effective);
                 $created->push($schedule);
             }
+
+            ReportCacheService::invalidateUser($task->user_id);
 
             return $created;
         });
@@ -181,6 +185,8 @@ class ScheduleManager
             // Generate new occurrences starting from effectiveDate up to horizon
             $this->generator->generate($lockedSchedule, $horizon, $effective);
 
+            ReportCacheService::invalidateUser($lockedSchedule->user_id);
+
             return $lockedSchedule->fresh(['occurrences']);
         });
     }
@@ -235,6 +241,8 @@ class ScheduleManager
                 'notes' => array_key_exists('notes', $data) ? $data['notes'] : $lockedOccurrence->notes,
             ]);
 
+            ReportCacheService::invalidateUser($lockedOccurrence->user_id);
+
             return $lockedOccurrence->fresh(['task', 'recurringSchedule']);
         });
     }
@@ -245,6 +253,7 @@ class ScheduleManager
     public function completeOccurrence(ScheduleOccurrence $occurrence, ?Carbon $completedAt = null): ScheduleOccurrence
     {
         $occurrence->markCompleted($completedAt);
+        ReportCacheService::invalidateUser($occurrence->user_id);
 
         return $occurrence->fresh();
     }
@@ -255,6 +264,7 @@ class ScheduleManager
     public function skipOccurrence(ScheduleOccurrence $occurrence): ScheduleOccurrence
     {
         $occurrence->markSkipped();
+        ReportCacheService::invalidateUser($occurrence->user_id);
 
         return $occurrence->fresh();
     }
@@ -283,6 +293,7 @@ class ScheduleManager
                 ]);
 
             $lockedSchedule->update(['is_active' => false]);
+            ReportCacheService::invalidateUser($lockedSchedule->user_id);
 
             return $lockedSchedule->fresh();
         });
@@ -309,6 +320,8 @@ class ScheduleManager
             if (! empty($data['mark_completed']) && $occurrence) {
                 $occurrence->markCompleted();
             }
+
+            ReportCacheService::invalidateUser($task->user_id);
 
             return $session;
         });
@@ -342,7 +355,11 @@ class ScheduleManager
             ->when($taskId, fn ($q) => $q->where('task_id', $taskId))
             ->whereBetween('scheduled_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
             ->where('status', '!=', 'cancelled')
-            ->with(['task', 'recurringSchedule', 'workSessions'])
+            ->with([
+                'task:id,title,status',
+                'recurringSchedule:id,task_id,type,start_time,duration_minutes',
+                'workSessions:id,user_id,task_id,schedule_occurrence_id,duration_minutes,started_at,ended_at',
+            ])
             ->orderBy('scheduled_date')
             ->orderBy('start_time')
             ->get();

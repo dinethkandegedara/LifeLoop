@@ -135,6 +135,8 @@ class TaskController extends Controller
             }
         }
 
+        \App\Services\Reporting\ReportCacheService::invalidateUser($task->user_id);
+
         return redirect()->back()->with('success', 'Task updated successfully.');
     }
 
@@ -146,6 +148,7 @@ class TaskController extends Controller
         $this->authorize('archive', $task);
 
         $task->archive();
+        \App\Services\Reporting\ReportCacheService::invalidateUser($task->user_id);
 
         return redirect()->back()->with('success', 'Task archived successfully.');
     }
@@ -158,6 +161,7 @@ class TaskController extends Controller
         $this->authorize('unarchive', $task);
 
         $task->unarchive();
+        \App\Services\Reporting\ReportCacheService::invalidateUser($task->user_id);
 
         return redirect()->back()->with('success', 'Task restored to active.');
     }
@@ -178,7 +182,9 @@ class TaskController extends Controller
                 ->with('error', 'Cannot permanently delete task because history exists. Archive the task instead to preserve records.');
         }
 
+        $userId = $task->user_id;
         $task->delete();
+        \App\Services\Reporting\ReportCacheService::invalidateUser($userId);
 
         return redirect()->back()->with('success', 'Task permanently deleted.');
     }

@@ -9,6 +9,7 @@ use App\Models\WorkSession;
 use App\Services\Scheduling\ScheduleManager;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class ScheduleReportingService
@@ -417,6 +418,11 @@ class ScheduleReportingService
      *
      * @return array<string, mixed>
      */
+    /**
+     * Generate comprehensive overview report for a given period.
+     *
+     * @return array<string, mixed>
+     */
     public function getOverviewReport(
         User $user,
         string $period = 'week',
@@ -425,52 +431,127 @@ class ScheduleReportingService
         ?int $taskId = null,
         ?Carbon $anchorDate = null
     ): array {
-        $bounds = $this->getPeriodBoundaries($user, $period, $customStart, $customEnd, $anchorDate);
-        $metrics = $this->getMetrics($user, $bounds['start'], $bounds['end'], $taskId);
+        $cacheKey = ReportCacheService::overviewCacheKey(
+            $user,
+            $period,
+            $customStart,
+            $customEnd,
+            $taskId,
+            $anchorDate
+        );
 
-        // Daily trends for this period (if period length <= 31 days)
-        $diffDays = $bounds['start']->diffInDays($bounds['end']) + 1;
-        $dailyTrends = $diffDays <= 31
-            ? $this->getDailyTrends($user, $bounds['start'], $bounds['end'], $taskId)
-            : [];
+        return Cache::remember($cacheKey, ReportCacheService::DEFAULT_TTL_SECONDS, function () use (
+            $user,
+            $period,
+            $customStart,
+            $customEnd,
+            $taskId,
+            $anchorDate
+        ) {
+            $bounds = $this->getPeriodBoundaries($user, $period, $customStart, $customEnd, $anchorDate);
+            $metrics = $this->getMetrics($user, $bounds['start'], $bounds['end'], $taskId);
 
-        // Task breakdown list for all active tasks
-        $tasks = $user->tasks()->active()->orderBy('title')->get(['id', 'title', 'description']);
+            // Daily trends for this period (if period length <= 31 days)
+            $diffDays = $bounds['start']->diffInDays($bounds['end']) + 1;
+            $dailyTrends = $diffDays <= 31
+                ? $this->getDailyTrends($user, $bounds['start'], $bounds['end'], $taskId)
+                : [];
 
-        $taskSummaries = [];
-        foreach ($tasks as $task) {
-            $taskMetrics = $this->getMetrics($user, $bounds['start'], $bounds['end'], $task->id);
-            $taskSummaries[] = [
-                'id' => $task->id,
-                'title' => $task->title,
-                'scheduled_hours' => $taskMetrics['scheduled_hours'],
-                'completed_planned_hours' => $taskMetrics['completed_planned_hours'],
-                'remaining_scheduled_hours' => $taskMetrics['remaining_scheduled_hours'],
-                'actual_hours' => $taskMetrics['actual_hours'],
-                'occurrence_completion_rate' => $taskMetrics['occurrence_completion_rate'],
-                'planned_hour_completion_rate' => $taskMetrics['planned_hour_completion_rate'],
-                'scheduled_occurrences_count' => $taskMetrics['scheduled_occurrences_count'],
-                'completed_occurrences_count' => $taskMetrics['completed_occurrences_count'],
-                'overdue_count' => $taskMetrics['overdue_incomplete_count'],
+            // Task breakdown list for all active tasks
+            $tasks = $user->tasks()->active()->orderBy('title')->get(['id', 'title', 'description']);
+
+            $tz = $user->timezone ?: 'UTC';
+            $now = now($tz);
+            $todayDate = $now->toDateString();
+            $currentTimeStr = $now->format('H:i:s');
+            $startDateStr = $bounds['start']->toDateString();
+            $endDateStr = $bounds['end']->toDateString();
+
+            // Single grouped SQL query for occurrence metrics per task
+            $taskOccurrenceStats = ScheduleOccurrence::where('user_id', $user->id)
+                ->where('status', '!=', 'cancelled')
+                ->whereBetween('scheduled_date', [$startDateStr, $endDateStr])
+                ->selectRaw("
+                    task_id,
+                    COALESCE(SUM(CASE WHEN status IN ('pending', 'completed') THEN duration_minutes ELSE 0 END), 0) as scheduled_minutes,
+                    COALESCE(SUM(CASE WHEN status = 'completed' THEN duration_minutes ELSE 0 END), 0) as completed_minutes,
+                    COALESCE(SUM(CASE WHEN status = 'pending' THEN duration_minutes ELSE 0 END), 0) as remaining_minutes,
+                    COUNT(CASE WHEN status IN ('pending', 'completed') THEN 1 END) as scheduled_count,
+                    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count,
+                    COUNT(CASE WHEN status = 'pending' AND (scheduled_date < ? OR (scheduled_date = ? AND start_time <= ?)) THEN 1 END) as overdue_count
+                ", [$todayDate, $todayDate, $currentTimeStr])
+                ->groupBy('task_id')
+                ->get()
+                ->keyBy('task_id');
+
+            // Single grouped SQL query for work session metrics per task
+            $taskWorkStats = WorkSession::where('user_id', $user->id)
+                ->whereBetween('started_at', [
+                    $bounds['start']->copy()->startOfDay()->toDateTimeString(),
+                    $bounds['end']->copy()->endOfDay()->toDateTimeString(),
+                ])
+                ->selectRaw("
+                    task_id,
+                    COALESCE(SUM(duration_minutes), 0) as actual_minutes
+                ")
+                ->groupBy('task_id')
+                ->get()
+                ->keyBy('task_id');
+
+            $taskSummaries = [];
+            foreach ($tasks as $task) {
+                $occ = $taskOccurrenceStats->get($task->id);
+                $work = $taskWorkStats->get($task->id);
+
+                $schedMins = (int) ($occ->scheduled_minutes ?? 0);
+                $compMins = (int) ($occ->completed_minutes ?? 0);
+                $remMins = (int) ($occ->remaining_minutes ?? 0);
+                $schedCount = (int) ($occ->scheduled_count ?? 0);
+                $compCount = (int) ($occ->completed_count ?? 0);
+                $overdueCount = (int) ($occ->overdue_count ?? 0);
+
+                $actMins = (int) ($work->actual_minutes ?? 0);
+
+                $scheduledHours = round($schedMins / 60, 2);
+                $completedHours = round($compMins / 60, 2);
+                $remainingHours = round($remMins / 60, 2);
+                $actualHours = round($actMins / 60, 2);
+
+                $occRate = $schedCount > 0 ? round(($compCount / $schedCount) * 100, 1) : 0.0;
+                $hourRate = $scheduledHours > 0 ? round(($completedHours / $scheduledHours) * 100, 1) : 0.0;
+
+                $taskSummaries[] = [
+                    'id' => $task->id,
+                    'title' => $task->title,
+                    'scheduled_hours' => $scheduledHours,
+                    'completed_planned_hours' => $completedHours,
+                    'remaining_scheduled_hours' => $remainingHours,
+                    'actual_hours' => $actualHours,
+                    'occurrence_completion_rate' => $occRate,
+                    'planned_hour_completion_rate' => $hourRate,
+                    'scheduled_occurrences_count' => $schedCount,
+                    'completed_occurrences_count' => $compCount,
+                    'overdue_count' => $overdueCount,
+                ];
+            }
+
+            return [
+                'period' => $bounds['period'],
+                'period_label' => $bounds['label'],
+                'start_date' => $bounds['start']->toDateString(),
+                'end_date' => $bounds['end']->toDateString(),
+                'anchor_date' => $bounds['anchor_date'],
+                'is_current' => $bounds['is_current'],
+                'prev_date' => $bounds['prev_date'],
+                'next_date' => $bounds['next_date'],
+                'can_go_next' => $bounds['can_go_next'],
+                'metrics' => $metrics,
+                'daily_trends' => $dailyTrends,
+                'task_summaries' => $taskSummaries,
+                'tasks' => $tasks,
+                'selected_task_id' => $taskId,
             ];
-        }
-
-        return [
-            'period' => $bounds['period'],
-            'period_label' => $bounds['label'],
-            'start_date' => $bounds['start']->toDateString(),
-            'end_date' => $bounds['end']->toDateString(),
-            'anchor_date' => $bounds['anchor_date'],
-            'is_current' => $bounds['is_current'],
-            'prev_date' => $bounds['prev_date'],
-            'next_date' => $bounds['next_date'],
-            'can_go_next' => $bounds['can_go_next'],
-            'metrics' => $metrics,
-            'daily_trends' => $dailyTrends,
-            'task_summaries' => $taskSummaries,
-            'tasks' => $tasks,
-            'selected_task_id' => $taskId,
-        ];
+        });
     }
 
     /**
@@ -487,65 +568,85 @@ class ScheduleReportingService
         ?string $statusFilter = null,
         ?Carbon $anchorDate = null
     ): array {
-        $bounds = $this->getPeriodBoundaries($user, $period, $customStart, $customEnd, $anchorDate);
-        $metrics = $this->getMetrics($user, $bounds['start'], $bounds['end'], $task->id);
+        $cacheKey = ReportCacheService::taskReportCacheKey(
+            $user,
+            $task->id,
+            $period,
+            $customStart,
+            $customEnd,
+            $statusFilter,
+            $anchorDate
+        );
 
-        // Daily trends (last 14 days or period)
-        $dailyTrends = $this->getDailyTrends($user, $bounds['start'], $bounds['end'], $task->id);
+        return Cache::remember($cacheKey, ReportCacheService::DEFAULT_TTL_SECONDS, function () use (
+            $user,
+            $task,
+            $period,
+            $customStart,
+            $customEnd,
+            $statusFilter,
+            $anchorDate
+        ) {
+            $bounds = $this->getPeriodBoundaries($user, $period, $customStart, $customEnd, $anchorDate);
+            $metrics = $this->getMetrics($user, $bounds['start'], $bounds['end'], $task->id);
 
-        // Weekly trends (past 8 weeks)
-        $weeklyTrends = $this->getWeeklyTrends($user, 8, $task->id);
+            // Daily trends (last 14 days or period)
+            $dailyTrends = $this->getDailyTrends($user, $bounds['start'], $bounds['end'], $task->id);
 
-        // Monthly trends (past 6 months)
-        $monthlyTrends = $this->getMonthlyTrends($user, 6, $task->id);
+            // Weekly trends (past 8 weeks)
+            $weeklyTrends = $this->getWeeklyTrends($user, 8, $task->id);
 
-        // Chronological scheduled occurrences history
-        $occurrencesQuery = ScheduleOccurrence::where('user_id', $user->id)
-            ->where('task_id', $task->id)
-            ->where('status', '!=', 'cancelled')
-            ->whereBetween('scheduled_date', [$bounds['start']->toDateString(), $bounds['end']->toDateString()]);
+            // Monthly trends (past 6 months)
+            $monthlyTrends = $this->getMonthlyTrends($user, 6, $task->id);
 
-        if ($statusFilter && in_array($statusFilter, ['completed', 'pending', 'skipped'], true)) {
-            $occurrencesQuery->where('status', $statusFilter);
-        }
+            // Chronological scheduled occurrences history
+            $occurrencesQuery = ScheduleOccurrence::where('user_id', $user->id)
+                ->where('task_id', $task->id)
+                ->where('status', '!=', 'cancelled')
+                ->whereBetween('scheduled_date', [$bounds['start']->toDateString(), $bounds['end']->toDateString()]);
 
-        $occurrencesHistory = $occurrencesQuery
-            ->with(['recurringSchedule', 'workSessions'])
-            ->orderByDesc('scheduled_date')
-            ->orderByDesc('start_time')
-            ->limit(100)
-            ->get();
+            if ($statusFilter && in_array($statusFilter, ['completed', 'pending', 'skipped'], true)) {
+                $occurrencesQuery->where('status', $statusFilter);
+            }
 
-        // Chronological work sessions history (including unscheduled work)
-        $workSessionsHistory = WorkSession::where('user_id', $user->id)
-            ->where('task_id', $task->id)
-            ->whereBetween('started_at', [
-                $bounds['start']->copy()->startOfDay()->toDateTimeString(),
-                $bounds['end']->copy()->endOfDay()->toDateTimeString(),
-            ])
-            ->with('occurrence')
-            ->orderByDesc('started_at')
-            ->limit(100)
-            ->get();
+            $occurrencesHistory = $occurrencesQuery
+                ->with(['recurringSchedule', 'workSessions'])
+                ->orderByDesc('scheduled_date')
+                ->orderByDesc('start_time')
+                ->limit(100)
+                ->get();
 
-        return [
-            'task' => $task->only(['id', 'title', 'description', 'status']),
-            'period' => $bounds['period'],
-            'period_label' => $bounds['label'],
-            'start_date' => $bounds['start']->toDateString(),
-            'end_date' => $bounds['end']->toDateString(),
-            'anchor_date' => $bounds['anchor_date'],
-            'is_current' => $bounds['is_current'],
-            'prev_date' => $bounds['prev_date'],
-            'next_date' => $bounds['next_date'],
-            'can_go_next' => $bounds['can_go_next'],
-            'status_filter' => $statusFilter ?: 'all',
-            'metrics' => $metrics,
-            'daily_trends' => $dailyTrends,
-            'weekly_trends' => $weeklyTrends,
-            'monthly_trends' => $monthlyTrends,
-            'occurrences_history' => $occurrencesHistory,
-            'work_sessions_history' => $workSessionsHistory,
-        ];
+            // Chronological work sessions history (including unscheduled work)
+            $workSessionsHistory = WorkSession::where('user_id', $user->id)
+                ->where('task_id', $task->id)
+                ->whereBetween('started_at', [
+                    $bounds['start']->copy()->startOfDay()->toDateTimeString(),
+                    $bounds['end']->copy()->endOfDay()->toDateTimeString(),
+                ])
+                ->with('occurrence')
+                ->orderByDesc('started_at')
+                ->limit(100)
+                ->get();
+
+            return [
+                'task' => $task->only(['id', 'title', 'description', 'status']),
+                'period' => $bounds['period'],
+                'period_label' => $bounds['label'],
+                'start_date' => $bounds['start']->toDateString(),
+                'end_date' => $bounds['end']->toDateString(),
+                'anchor_date' => $bounds['anchor_date'],
+                'is_current' => $bounds['is_current'],
+                'prev_date' => $bounds['prev_date'],
+                'next_date' => $bounds['next_date'],
+                'can_go_next' => $bounds['can_go_next'],
+                'status_filter' => $statusFilter ?: 'all',
+                'metrics' => $metrics,
+                'daily_trends' => $dailyTrends,
+                'weekly_trends' => $weeklyTrends,
+                'monthly_trends' => $monthlyTrends,
+                'occurrences_history' => $occurrencesHistory,
+                'work_sessions_history' => $workSessionsHistory,
+            ];
+        });
     }
 }

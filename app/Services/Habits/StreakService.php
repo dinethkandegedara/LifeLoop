@@ -5,7 +5,9 @@ namespace App\Services\Habits;
 use App\Models\ScheduleOccurrence;
 use App\Models\User;
 use App\Models\WorkSession;
+use App\Services\Reporting\ReportCacheService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class StreakService
 {
@@ -31,9 +33,12 @@ class StreakService
      */
     public function getStreakData(User $user): array
     {
-        $tz = $user->timezone ?: 'UTC';
-        $today = now($tz)->startOfDay();
-        $todayDateStr = $today->toDateString();
+        $cacheKey = ReportCacheService::streakCacheKey($user);
+
+        return Cache::remember($cacheKey, ReportCacheService::DEFAULT_TTL_SECONDS, function () use ($user) {
+            $tz = $user->timezone ?: 'UTC';
+            $today = now($tz)->startOfDay();
+            $todayDateStr = $today->toDateString();
 
         // Examine past 90 days of history
         $startDate = $today->copy()->subDays(90);
@@ -166,16 +171,17 @@ class StreakService
             $subtext = 'Complete at least 80% of scheduled tasks today to start a streak!';
         }
 
-        return [
-            'current_streak' => $currentStreak,
-            'best_streak' => $bestStreak,
-            'today_completion_rate' => $todayInfo['rate'],
-            'today_qualified' => $todayQualified,
-            'today_scheduled_count' => $todayInfo['total_count'],
-            'today_completed_count' => $todayInfo['completed_count'],
-            'label' => $label,
-            'subtext' => $subtext,
-            'badge_name' => $badgeName,
-        ];
+            return [
+                'current_streak' => $currentStreak,
+                'best_streak' => $bestStreak,
+                'today_completion_rate' => $todayInfo['rate'],
+                'today_qualified' => $todayQualified,
+                'today_scheduled_count' => $todayInfo['total_count'],
+                'today_completed_count' => $todayInfo['completed_count'],
+                'label' => $label,
+                'subtext' => $subtext,
+                'badge_name' => $badgeName,
+            ];
+        });
     }
 }

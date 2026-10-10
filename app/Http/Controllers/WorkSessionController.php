@@ -102,6 +102,8 @@ class WorkSessionController extends Controller
 
         $workSession->save();
 
+        \App\Services\Reporting\ReportCacheService::invalidateUser($workSession->user_id);
+
         if ($request->wantsJson()) {
             return response()->json([
                 'message' => 'Work session updated successfully.',
@@ -119,7 +121,10 @@ class WorkSessionController extends Controller
     {
         $this->authorize('delete', $workSession);
 
+        $userId = $workSession->user_id;
         $workSession->delete();
+
+        \App\Services\Reporting\ReportCacheService::invalidateUser($userId);
 
         if ($request->wantsJson()) {
             return response()->json([

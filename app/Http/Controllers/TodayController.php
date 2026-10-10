@@ -69,7 +69,7 @@ class TodayController extends Controller
                 $rangeStart->copy()->startOfDay()->toDateTimeString(),
                 $rangeEnd->copy()->endOfDay()->toDateTimeString(),
             ])
-            ->with(['task:id,title', 'occurrence'])
+            ->with(['task:id,title', 'occurrence:id,user_id,task_id,scheduled_date,start_time,duration_minutes,status'])
             ->orderByDesc('started_at')
             ->get();
 
@@ -80,7 +80,7 @@ class TodayController extends Controller
 
         // 8. Recent recorded work sessions (for audit history log)
         $recentWorkSessions = WorkSession::where('user_id', $user->id)
-            ->with(['task:id,title', 'occurrence'])
+            ->with(['task:id,title', 'occurrence:id,user_id,task_id,scheduled_date,start_time,duration_minutes,status'])
             ->orderByDesc('started_at')
             ->limit(50)
             ->get();
@@ -90,7 +90,11 @@ class TodayController extends Controller
             ->where('status', 'pending')
             ->where('scheduled_date', '<', $today->toDateString())
             ->where('scheduled_date', '>=', $today->copy()->subDays(30)->toDateString())
-            ->with(['task:id,title', 'recurringSchedule', 'workSessions'])
+            ->with([
+                'task:id,title',
+                'recurringSchedule:id,task_id,type,start_time,duration_minutes',
+                'workSessions:id,user_id,task_id,schedule_occurrence_id,duration_minutes,started_at,ended_at',
+            ])
             ->orderBy('scheduled_date')
             ->orderBy('start_time')
             ->limit(20)

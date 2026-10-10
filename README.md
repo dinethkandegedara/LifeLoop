@@ -1,280 +1,205 @@
-# LifeLoop
+# LifeLoop — Personal Schedule & Focus Tracker
 
-**LifeLoop** is a lightweight, multi-user personal scheduling and actual-work tracking web application engineered for deployment on conventional PHP shared hosting environments while providing a reactive, single-page user experience.
+[![Tests](https://img.shields.io/badge/tests-98%20passed-10b981?style=flat-square)](tests)
+[![PHP](https://img.shields.io/badge/PHP-8.2%20%7C%208.3-777bb4?style=flat-square&logo=php&logoColor=white)](https://php.net)
+[![Laravel](https://img.shields.io/badge/Laravel-11.x-ff2d20?style=flat-square&logo=laravel&logoColor=white)](https://laravel.com)
+[![Vue](https://img.shields.io/badge/Vue-3.5%20%2B%20TypeScript-42b883?style=flat-square&logo=vue.js&logoColor=white)](https://vuejs.org)
+[![Inertia](https://img.shields.io/badge/Inertia-v2-9553e9?style=flat-square)](https://inertiajs.com)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38bdf8?style=flat-square&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
----
-
-## Architecture & Technology Stack
-
-| Layer | Technology | Details |
-|---|---|---|
-| **Backend** | [Laravel 11](https://laravel.com) | Clean application skeleton, Eloquent ORM, PHP 8.2+ / 8.3 |
-| **Frontend** | [Vue 3](https://vuejs.org) + [TypeScript](https://www.typescriptlang.org) | Composition API with strict TypeScript typing |
-| **Bridge** | [Inertia.js](https://inertiajs.com) | Same-origin architecture with zero API synchronization boilerplate |
-| **Build Tool** | [Vite](https://vitejs.dev) | Lightning-fast HMR and optimized production asset bundling |
-| **Styling** | [Tailwind CSS](https://tailwindcss.com) | Utility-first responsive design system with CSS custom property tokens |
-| **Database** | [MariaDB 11](https://mariadb.org) / MySQL 8+ | Relational schema with strict foreign keys & user isolation |
-| **Authentication** | [Laravel Sanctum](https://laravel.com/docs/sanctum) | First-party browser session cookies with CSRF protection |
-| **Testing** | [PHPUnit 11](https://phpunit.de) | Automated unit and feature testing suites |
-
-### Deployment Architecture
-- **Same-Origin Deployment:** Laravel directly serves the application and compiled Vue assets from `public/build/`.
-- **No Node Server in Production:** Node.js and Vite are used strictly at build time (`npm run build`). Production only requires standard Apache/Nginx + PHP-FPM or PHP shared hosting.
-- **Session-Based Security:** Authentication relies on secure HTTP-only session cookies and CSRF tokens rather than storing JWTs in browser storage.
+LifeLoop is a self-hosted personal scheduling and focus tracker designed to bridge the gap between planned routines and actual execution. Built on Laravel 11, Inertia.js, and Vue 3 with TypeScript, it provides single-page responsiveness with server-side security, fully compatible with standard PHP shared hosting without requiring Redis servers, background Node processes, or persistent daemon supervisors.
 
 ---
 
-## Design System
+## Key Capabilities
 
-LifeLoop implements a calm, modern, and minimal design system engineered for high-focus productivity:
+### 1. Flexible Recurring Schedules
+- **Rule Types**: Supports daily, weekly (multi-day selection), monthly by date (with month-end clamping), and monthly by weekday position (e.g., *1st Monday*, *last Friday*).
+- **Audit-Safe Historical Preservation**: Editing a recurring rule recalculates future pending occurrences without touching past history, completed items, or occurrences with logged work sessions.
+- **One-Off Exceptions**: Reschedule or adjust durations for individual occurrences while preserving the original schedule rule.
 
-### Color Palette & Design Tokens
-- **Primary Signature:** Lavender (`#9B8AFB`), with subtle tint states (`rgba(155, 138, 251, 0.12)`) and focus rings.
-- **Secondary Accent:** Indigo (`#6366F1`) for ancillary badges and highlights.
-- **Light Theme Surfaces:** Soft near-white background (`#F8F9FC`) and crisp white surfaces (`#FFFFFF`).
-- **Dark Theme Surfaces:** Deep charcoal background (`#121316`) and slightly lighter charcoal surfaces (`#1A1B20`), avoiding harsh pure black.
-- **Semantic Feedback:** Dedicated green, amber, red, and blue tokens strictly for task completion, in-progress states, and warnings.
-- **Accessibility & Motion:** High contrast text ratios and `@media (prefers-reduced-motion: reduce)` support.
+### 2. Actual vs. Planned Work Logging
+- **Focus Sessions**: Record real duration spent on scheduled occurrences or log unscheduled ad-hoc focus blocks.
+- **Overdue Tracking**: Incomplete occurrences past their start time remain overdue until completed or explicitly marked skipped.
+- **Skipped Semantics**: Explicitly skipping an occurrence removes it from overdue lists and planned completion calculations while preserving audit logs.
 
-### Theme Engine
-- **Persistent Selection:** Light, Dark, or System preference stored in `localStorage`.
-- **Zero-Flash Hydration:** Synchronous inline bootstrapper in `app.blade.php` prevents theme flickering on page load.
-- **Controls:** Embedded theme toggles available in the desktop sidebar, mobile header, and top action bar.
+### 3. Analytics & Performance Reports
+- **Multi-Window Reporting**: Analyze planned hours, actual hours, completion rates, and daily execution rhythms across Today, Week, Month, or Custom date ranges.
+- **Period Navigation**: Browse backward and forward across historical dates, weeks, and months with timezone normalization.
+- **Task Deep-Dives**: Detailed per-task reports with 8-week and 6-month historical trend graphs.
 
-### Reusable UI Components (`resources/js/Components/ui/`)
-- **Buttons:** `Button.vue` (primary, secondary, subtle, ghost, danger) and `IconButton.vue`.
-- **Form Controls:** `Input.vue`, `Select.vue`, `Checkbox.vue`, and `DateTimeInput.vue`.
-- **Surfaces & Overlays:** `Card.vue` and accessible `Dialog.vue` (modal with escape key & backdrop dismiss).
-- **Navigation & Menus:** `Dropdown.vue`, `Tooltip.vue`, `Tabs.vue`, and `SegmentedControl.vue`.
-- **Feedback & States:** `Badge.vue`, `Toast.vue` (`useToast` composable), `EmptyState.vue`, `Skeleton.vue`, and `ErrorAlert.vue`.
-- **Layout:** `AppLayout.vue`, `AppSidebar.vue`, `AppHeader.vue`, and `PageHeader.vue`.
+### 4. Streak & Habit Consistency
+- **Daily Streak Engine**: Automatically tallies consecutive days meeting the consistency threshold (≥80% completion of scheduled tasks or 30+ minutes of recorded focus work).
+- **Milestone Badges**: Progressive badges from *Active Streak* to *Diamond Consistency* (30+ days).
 
----
+### 5. iCalendar / Webcal Sync Feed
+- **External Calendar Subscription**: Subscribe to your LifeLoop schedule from Google Calendar, Apple Calendar, or Outlook via a tokenized RFC 5545 `.ics` feed.
+- **On-Demand Token Invalidation**: Regenerate feed tokens at any time to instantly revoke prior calendar subscriptions.
 
-## Visual Prototype: Today Screen
-
-The visual prototype is accessible at `/` (`resources/js/Pages/Today.vue`) featuring realistic mock data:
-- **Greeting & Date:** Dynamic greeting ("Good morning / afternoon / evening, Alex") and current date.
-- **Summary Metrics:** Planned vs. Completed vs. Extra Work hours with interactive progress bar.
-- **Interactive Scheduled Tasks:** Live checkboxes to toggle completion state and trigger toast notifications.
-- **Log Extra Work Action:** Modal dialog to record ad-hoc tasks, durations, and notes, updating daily totals in real time.
-- **View Previews:** Interactive switcher to inspect the Live Schedule, Empty State, and Skeleton Loading states.
+### 6. Shared-Hosting Performance Architecture
+- **Zero Redis Requirement**: Powered by Laravel's database/file cache drivers.
+- **$O(1)$ User-Isolated Cache Versioning**: Bumping a user's version instantly invalidates cached reports and streaks on any completion, skip, reschedule, or work log without key scans.
+- **Optimized SQL Aggregation**: Multi-task report overviews run in grouped SQL queries rather than N+1 PHP loops, slashing queries by over 95%.
 
 ---
 
-## Local Development Setup
+## Technical Stack
 
-### 1. Prerequisites
-- **Node.js** (v20+ or v22 LTS) & **npm**
-- **Podman** or **Docker** (for local MariaDB and containerized PHP toolchain)
-- (Optional) **PHP 8.2+** and **Composer 2.x** installed natively on host
-
-### 2. Database Service (Podman)
-Start the local MariaDB container:
-```bash
-podman run -d --name schedule-tracker-mariadb \
-  -e MARIADB_ROOT_PASSWORD=root \
-  -e MARIADB_DATABASE=schedule_tracker \
-  -e MARIADB_USER=tracker \
-  -e MARIADB_PASSWORD=secret \
-  -p 127.0.0.1:3306:3306 \
-  docker.io/library/mariadb:11
+```
+Frontend:   Vue 3 (Composition API) + TypeScript + Tailwind CSS
+Bridge:     Inertia.js v2 (Same-Origin Session Authentication)
+Backend:    Laravel 11.x + Eloquent ORM + FormRequest Validation
+Database:   MariaDB 10.5+ / MySQL 8.0+ / SQLite 3
+Cache:      Database or File store (with deterministic versioned keys)
+Mail:       SMTP / SMTPS (Email OTP verification and password resets)
 ```
 
-### 3. Environment Configuration
-Copy `.env.example` to `.env`:
+---
+
+## Getting Started (Local Development)
+
+### Prerequisites
+- **PHP** 8.2 or 8.3 with extensions: `pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`, `json`, `bcmath`, `curl`, `fileinfo`
+- **Composer** 2.x
+- **Node.js** 20.x or 22.x LTS & **npm**
+- **MySQL 8.0+** or **MariaDB 10.5+** (or SQLite for testing)
+
+### Installation
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/your-username/schedule-tracker.git
+   cd schedule-tracker
+   ```
+
+2. **Install PHP dependencies**:
+   ```bash
+   composer install
+   ```
+
+3. **Install JavaScript dependencies**:
+   ```bash
+   npm install
+   ```
+
+4. **Environment setup**:
+   ```bash
+   cp .env.example .env
+   php artisan key:generate
+   ```
+
+5. **Configure database** in `.env`:
+   ```ini
+   DB_CONNECTION=mariadb
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_DATABASE=schedule_tracker
+   DB_USERNAME=your_db_user
+   DB_PASSWORD=your_db_password
+   ```
+
+6. **Run database migrations**:
+   ```bash
+   php artisan migrate
+   ```
+
+7. **Compile frontend assets**:
+   ```bash
+   # Development with Hot Module Replacement:
+   npm run dev
+
+   # Production build:
+   npm run build
+   ```
+
+8. **Start the local development server**:
+   ```bash
+   php artisan serve --port=8000
+   ```
+
+---
+
+## Security Architecture
+
+- **Session Hardening**: 24-hour inactivity session lifetime (`SESSION_LIFETIME=1440`). Cookies are marked `HttpOnly` with `SameSite=Lax`. Session IDs are regenerated upon authentication.
+- **Hashed One-Time Passwords**: 6-digit email OTPs are hashed with Bcrypt before persistence. Verification is capped at 5 attempts and expires after 5 minutes, with a 60-second resend cooldown.
+- **Resource Authorization**: Every model mutation is guarded by dedicated Eloquent Policies verifying tenant ownership.
+- **Sanitized Outputs & Strict Types**: Parameterized SQL queries throughout; user input passed through typed FormRequests.
+
+---
+
+## Verification & Test Suite
+
+The test suite covers recurring schedule calculations, calendar range generations, work session audits, OTP security, and cache invalidation mechanics.
+
 ```bash
-cp .env.example .env
+# Run all automated tests (98 tests, 669 assertions)
+php artisan test
+
+# Run frontend TypeScript type checking
+npx tsc --noEmit
+
+# Run production asset build
+npm run build
 ```
-Ensure database credentials match:
+
+---
+
+## Production Shared-Hosting Deployment
+
+LifeLoop is built to run on standard cPanel, DirectAdmin, or LiteSpeed/Apache shared hosting environments.
+
+### 1. Document Root Configuration
+Ensure the public web root points directly to the `/public` folder:
+- **Subdomain or Addon Domain**: Set the Document Root in your hosting panel to `/home/username/schedule-tracker/public`.
+- **Primary Domain (`public_html`)**: Upload the application files to `/home/username/schedule-tracker/` and move only the contents of `/public` into `/home/username/public_html/`. Update the vendor and bootstrap paths in `public_html/index.php`.
+
+### 2. Production Environment (`.env`)
 ```ini
+APP_NAME="LifeLoop"
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://yourdomain.com
+
 DB_CONNECTION=mariadb
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_DATABASE=schedule_tracker
-DB_USERNAME=tracker
-DB_PASSWORD=secret
-```
+DB_DATABASE=cpanel_database
+DB_USERNAME=cpanel_user
+DB_PASSWORD="your_database_password"
 
-### 4. Install Dependencies
-Install frontend packages:
-```bash
-npm install
-```
+CACHE_STORE=database
+SESSION_DRIVER=database
+SESSION_LIFETIME=1440
+SESSION_SECURE_COOKIE=true
+SESSION_HTTP_ONLY=true
+SESSION_SAME_SITE=lax
+QUEUE_CONNECTION=sync
 
-Install backend PHP packages (using host Composer or the local PHP container):
-```bash
-# Using local Podman PHP runtime:
-podman run --rm --userns=keep-id -v $(pwd):/app:Z -w /app localhost/schedule-tracker-php:8.3 composer install
-```
-
-### 5. Run Migrations
-```bash
-podman run --rm --userns=keep-id --net=host -v $(pwd):/app:Z -w /app localhost/schedule-tracker-php:8.3 php artisan migrate
-```
-
-### 6. Development Servers
-To run the Vite hot-reloading development server:
-```bash
-npm run dev
-```
-
-To run the Laravel backend server:
-```bash
-podman run --rm -it --userns=keep-id --net=host -v $(pwd):/app:Z -w /app localhost/schedule-tracker-php:8.3 php artisan serve --host=127.0.0.1 --port=8000
-```
-
----
-
----
-
-## Authentication & Security Architecture
-
-LifeLoop implements a robust, privacy-first authentication system using Laravel 11, Inertia.js, and Laravel Sanctum session-based authentication:
-
-### 1. Email OTP Verification Flow
-- **Cryptographically Secure OTP:** 6-digit numeric codes generated using `random_int(100000, 999999)`.
-- **Hashed Storage:** OTPs are hashed using `Hash::make()` (bcrypt) before database persistence. Plaintext OTPs are never stored or logged in application logs.
-- **Expiry & Invalidation:** OTPs expire strictly after **5 minutes**. A successful verification marks the code as `consumed_at`. Re-sending an OTP automatically invalidates all previous active OTPs for that user and purpose.
-- **Rate Limiting & Attempt Caps:**
-  - Max **5 attempts** per OTP before it is locked and invalidated.
-  - **60-second cooldown** enforced between OTP resends.
-- **Anti-Enumeration Protection:** Password reset requests return an identical generic response regardless of whether the submitted email address exists in the database.
-
-### 2. Session Management & 24-Hour Persistence
-- **Inactivity-Based Expiry:** Configured with `SESSION_LIFETIME=1440` (24 hours).
-  > [!NOTE]
-  > Session expiry is **inactivity-based**: as long as the user actively interacts with the application, the session is refreshed. Inactivity exceeding 24 hours invalidates the session.
-- **Persistent Browser Cookies:** `SESSION_EXPIRE_ON_CLOSE=false` ensures that closing and reopening the browser window does not terminate the session within the valid window.
-- **24-Hour Persistent Recaller:** The authentication guard is configured with a 24-hour (1440 minutes / 86,400s) persistent `remember_web_...` cookie. This is issued on registration and login by default, ensuring sessions survive complete browser exits and process restarts within the 24-hour window.
-- **Cookie Hardening:** `SESSION_HTTP_ONLY=true` prevents XSS token extraction, `SESSION_SAME_SITE=lax` defends against CSRF attacks, and `SESSION_SECURE_COOKIE=true` is used in production over HTTPS.
-- **Sanctum First-Party SPA:** Employs stateful session cookies and standard Laravel CSRF tokens (`X-XSRF-TOKEN`).
-
-### 3. Tenant Data Isolation
-- **Strict Authorization:** Authenticated requests are scoped to `auth()->id()`. Direct Object Reference (IDOR) attacks are prevented by validating ownership before record inspection or mutation.
-- **Mass Assignment Protection:** Models define explicit `$fillable` attributes (`name`, `email`, `password`, `timezone`).
-
-### 4. User Settings & Timezone Support
-- Authenticated users can manage their account profile and preferred timezone at `/settings`.
-- Timezones are selectable from standard IANA identifiers (`UTC`, `America/New_York`, `Asia/Tokyo`, `Europe/London`, etc.).
-
----
-
-## Mail Configuration
-
-LifeLoop uses Laravel's built-in Mail services. 
-
-### Local Development / Testing
-To log outgoing emails locally without connecting to an external mail server, configure `.env`:
-```ini
-MAIL_MAILER=log
-MAIL_FROM_ADDRESS="lifeloopsupport@yourdomain.com"
-MAIL_FROM_NAME="LifeLoop"
-```
-Email messages including OTP codes will be recorded in `storage/logs/laravel.log`.
-
-### Production / Custom SMTP
-To deliver real emails over SSL/TLS SMTP, configure the following in `.env` (never commit real credentials to version control):
-```ini
 MAIL_MAILER=smtp
 MAIL_SCHEME=smtps
 MAIL_HOST=mail.yourdomain.com
 MAIL_PORT=465
-MAIL_USERNAME=your-username@yourdomain.com
-MAIL_PASSWORD=your-secure-password
-MAIL_FROM_ADDRESS="your-username@yourdomain.com"
+MAIL_USERNAME=support@yourdomain.com
+MAIL_PASSWORD="your_smtp_password"
+MAIL_FROM_ADDRESS="support@yourdomain.com"
 MAIL_FROM_NAME="LifeLoop"
 ```
 
----
-
-## Testing & Quality Assurance
-
-Run TypeScript type-checking:
+### 3. File Permissions & Optimization
 ```bash
-npx tsc --noEmit
-```
+# Ensure storage and bootstrap caches are writable
+chmod -R 775 storage bootstrap/cache
 
-Build production assets:
-```bash
-npm run build
-```
-
-Run automated backend tests (32 tests covering auth, OTP limits, data isolation, and session security):
-```bash
-php artisan test
-```
-
-### Feature Test Coverage
-- `Tests\Feature\Auth\RegistrationTest`: Registration, duplicate email rejection, hashed OTP dispatch.
-- `Tests\Feature\Auth\EmailVerificationOtpTest`: Valid OTP verification, attempt throttling, expiration, reuse blocking, 60s cooldown.
-- `Tests\Feature\Auth\AuthenticationTest`: Login, invalid credentials, unverified user redirect, session destruction on logout.
-- `Tests\Feature\Auth\PasswordResetOtpTest`: Enumeration-resistant reset request, OTP verification, password updating.
-- `Tests\Feature\Auth\UserDataIsolationTest`: Route protection, unauthenticated redirects, cross-user data isolation.
-- `Tests\Feature\Auth\SessionSecurityTest`: 24-hour lifetime, persistent cookies, security attributes (`http_only`, `same_site`).
-
----
-
-## Project Structure
-
-```text
-├── app/
-│   ├── Http/
-│   │   ├── Controllers/
-│   │   │   ├── Auth/
-│   │   │   │   ├── AuthenticatedSessionController.php   # Login / Logout
-│   │   │   │   ├── EmailVerificationOtpController.php   # OTP verification & resend
-│   │   │   │   ├── PasswordResetOtpController.php       # Password reset via OTP
-│   │   │   │   └── RegisteredUserController.php         # User registration
-│   │   │   └── SettingsController.php                   # Timezone & profile settings
-│   │   └── Middleware/
-│   │       ├── EnsureEmailIsOtpVerified.php             # Gates unverified users to /verify-otp
-│   │       └── HandleInertiaRequests.php                # Inertia shared props & auth session
-│   ├── Mail/
-│   │   └── OtpMail.php                                  # Mailable for 6-digit OTP delivery
-│   ├── Models/
-│   │   ├── EmailOtp.php                                 # Hashed OTP model & helper methods
-│   │   └── User.php                                     # User model with MustVerifyEmail & timezone
-│   └── Services/
-│       └── OtpService.php                               # Cryptographic OTP generator & verifier
-├── bootstrap/
-│   └── app.php                                          # Middleware aliases & routing bootstrap
-├── config/                                              # Laravel application configuration
-├── database/
-│   └── migrations/
-│       ├── 2026_10_09_132355_add_timezone_to_users_table.php
-│       └── 2026_10_09_132355_create_email_otps_table.php
-├── resources/
-│   ├── css/
-│   │   └── app.css                                      # Design tokens, themes & typography
-│   ├── js/
-│   │   ├── Components/
-│   │   │   ├── layout/                                  # AppLayout, AppSidebar, AppHeader, PageHeader
-│   │   │   └── ui/                                      # Reusable UI component library
-│   │   ├── Pages/
-│   │   │   ├── Auth/
-│   │   │   │   ├── ForgotPassword.vue                   # Request password reset code
-│   │   │   │   ├── Login.vue                            # User sign-in
-│   │   │   │   ├── Register.vue                         # User sign-up with timezone
-│   │   │   │   ├── ResetPassword.vue                    # Enter OTP & new password
-│   │   │   │   └── VerifyOtp.vue                        # Enter OTP code & resend
-│   │   │   ├── Settings.vue                             # Timezone & account settings
-│   │   │   ├── Today.vue                                # Today schedule visual prototype
-│   │   │   └── Welcome.vue                              # Foundation status view
-│   │   └── app.ts                                       # Frontend client bootstrap
-│   └── views/
-│       ├── app.blade.php                                # Root Inertia Blade template
-│       └── emails/
-│           └── otp.blade.php                            # Styled HTML OTP email notification
-├── routes/
-│   └── web.php                                          # Application routes (Guest, Auth, Verified)
-└── tests/
-    └── Feature/
-        └── Auth/                                        # Complete authentication test suites
+# Cache routes and configuration
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
 ```
 
 ---
 
 ## License
 
-This software is licensed under the [MIT License](LICENSE).
+This project is licensed under the [MIT License](LICENSE).

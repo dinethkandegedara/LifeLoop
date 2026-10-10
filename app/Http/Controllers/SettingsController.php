@@ -19,6 +19,10 @@ class SettingsController extends Controller
     {
         $user = $request->user();
 
+        $token = $user->getCalendarToken();
+        $feedUrl = url("/calendar/feed/{$token}.ics");
+        $webcalUrl = preg_replace('/^https?:\/\//', 'webcal://', $feedUrl);
+
         return Inertia::render('Settings', [
             'user' => [
                 'id' => $user->id,
@@ -29,6 +33,11 @@ class SettingsController extends Controller
             'timezones' => timezone_identifiers_list(),
             'emailCooldown' => $otpService->getResendCooldownRemaining($user->email, 'email_change'),
             'passwordCooldown' => $otpService->getResendCooldownRemaining($user->email, 'password_change'),
+            'calendarFeed' => [
+                'token' => $token,
+                'feedUrl' => $feedUrl,
+                'webcalUrl' => $webcalUrl,
+            ],
         ]);
     }
 

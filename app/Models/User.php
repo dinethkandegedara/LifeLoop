@@ -23,6 +23,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'email',
         'password',
         'timezone',
+        'calendar_token',
     ];
 
     /**
@@ -86,5 +87,29 @@ class User extends Authenticatable implements MustVerifyEmail
     public function workSessions(): HasMany
     {
         return $this->hasMany(WorkSession::class);
+    }
+
+    /**
+     * Get or generate a secure calendar feed token for the user.
+     */
+    public function getCalendarToken(): string
+    {
+        if (empty($this->calendar_token)) {
+            $this->calendar_token = bin2hex(random_bytes(32));
+            $this->saveQuietly();
+        }
+
+        return $this->calendar_token;
+    }
+
+    /**
+     * Regenerate the calendar feed token.
+     */
+    public function regenerateCalendarToken(): string
+    {
+        $this->calendar_token = bin2hex(random_bytes(32));
+        $this->saveQuietly();
+
+        return $this->calendar_token;
     }
 }

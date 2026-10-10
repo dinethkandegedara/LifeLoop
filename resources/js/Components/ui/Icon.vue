@@ -218,6 +218,19 @@ const iconSize = computed(() => {
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         </g>
 
+        <!-- Copy -->
+        <g v-else-if="name === 'copy'">
+            <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+        </g>
+
+        <!-- External Link -->
+        <g v-else-if="name === 'external-link'">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" x2="21" y1="14" y2="3" />
+        </g>
+
         <!-- Fallback dot -->
         <circle v-else cx="12" cy="12" r="6" />
     </svg>

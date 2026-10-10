@@ -46,6 +46,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 });
 
+// Public read-only tokenized calendar subscription feed (.ics / webcal)
+Route::get('/calendar/feed/{token}.ics', [\App\Http\Controllers\CalendarFeedController::class, 'feed'])
+    ->name('calendar.feed');
+
 /*
 |--------------------------------------------------------------------------
 | Protected & Verified Application Routes
@@ -72,6 +76,7 @@ Route::middleware(['auth', 'verified.otp'])->group(function () {
     Route::put('/settings/email', [SettingsController::class, 'updateEmail'])->name('settings.email.update');
     Route::post('/settings/password/send-otp', [SettingsController::class, 'sendPasswordOtp'])->name('settings.password.send-otp');
     Route::put('/settings/password', [SettingsController::class, 'updatePassword'])->name('settings.password.update');
+    Route::post('/settings/calendar-feed/regenerate', [\App\Http\Controllers\CalendarFeedController::class, 'regenerate'])->name('settings.calendar-feed.regenerate');
 
     Route::get('/tasks', [TaskController::class, 'index'])->name('tasks.index');
     Route::post('/tasks', [TaskController::class, 'store'])->name('tasks.store');

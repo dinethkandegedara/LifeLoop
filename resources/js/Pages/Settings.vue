@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/layout/PageHeader.vue';
@@ -19,11 +19,18 @@ interface UserData {
     timezone: string;
 }
 
+interface CalendarFeedData {
+    token: string;
+    feedUrl: string;
+    webcalUrl: string;
+}
+
 const props = defineProps<{
     user: UserData;
     timezones: string[];
     emailCooldown?: number;
     passwordCooldown?: number;
+    calendarFeed?: CalendarFeedData;
 }>();
 
 const toast = useToast();
@@ -138,6 +145,42 @@ function submitPasswordChange() {
             toast.success('Password updated', 'Your password has been securely updated.');
             formPassword.reset();
             isPasswordSectionOpen.value = false;
+        },
+    });
+}
+
+// 4. Calendar Feed Flow
+const copiedCalendarLink = ref(false);
+const regeneratingCalendarToken = ref(false);
+
+const googleCalendarSubscribeUrl = computed(() => {
+    const rawUrl = props.calendarFeed?.webcalUrl || props.calendarFeed?.feedUrl || '';
+    return `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(rawUrl)}`;
+});
+
+function copyCalendarLink() {
+    if (!props.calendarFeed?.feedUrl) return;
+    navigator.clipboard.writeText(props.calendarFeed.feedUrl);
+    copiedCalendarLink.value = true;
+    toast.success('Link Copied', 'Calendar feed URL copied to clipboard.');
+    setTimeout(() => {
+        copiedCalendarLink.value = false;
+    }, 2500);
+}
+
+function regenerateCalendarToken() {
+    if (!confirm('Are you sure you want to regenerate your calendar link? Existing calendar subscriptions will stop syncing until updated with the new link.')) {
+        return;
+    }
+    regeneratingCalendarToken.value = true;
+    router.post('/settings/calendar-feed/regenerate', {}, {
+        preserveScroll: true,
+        onSuccess: () => {
+            regeneratingCalendarToken.value = false;
+            toast.success('Link Regenerated', 'A fresh calendar token has been issued.');
+        },
+        onError: () => {
+            regeneratingCalendarToken.value = false;
         },
     });
 }
@@ -520,6 +563,100 @@ onUnmounted(() => {
                                 </Button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            </Card>
+
+            <!-- Calendar Synchronization (iCal / Webcal) Card -->
+            <Card>
+                <template #header>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <Icon name="calendar" :size="16" class="text-primary" />
+                            <h2 class="text-base font-semibold text-content-primary">
+                                Calendar Synchronization (iCal / Webcal)
+                            </h2>
+                        </div>
+                        <Badge variant="primary" size="sm">Auto-Sync</Badge>
+                    </div>
+                    <p class="text-xs text-content-secondary mt-0.5">
+                        Subscribe to your LifeLoop scheduled blocks directly in Google Calendar, Apple Calendar, or Microsoft Outlook.
+                    </p>
+                </template>
+
+                <div class="space-y-4 mt-2">
+                    <!-- Feed Link Input Box with 1-click Copy -->
+                    <div>
+                        <label class="block text-xs font-medium text-content-secondary mb-1.5">
+                            Personal Subscription Feed URL (Private)
+                        </label>
+                        <div class="flex items-center gap-2">
+                            <input
+                                type="text"
+                                readonly
+                                :value="calendarFeed?.feedUrl"
+                                class="w-full h-10 rounded-lg text-xs bg-surface-subdued text-content-primary border border-border-subtle px-3 font-mono outline-none select-all focus:border-primary"
+                            />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                @click="copyCalendarLink"
+                                class="shrink-0"
+                            >
+                                <Icon :name="copiedCalendarLink ? 'check' : 'copy'" :size="14" class="mr-1.5" />
+                                {{ copiedCalendarLink ? 'Copied!' : 'Copy' }}
+                            </Button>
+                        </div>
+                        <p class="text-[11px] text-content-muted mt-1">
+                            Keep this link private. Any calendar client with this URL can read your scheduled blocks.
+                        </p>
+                    </div>
+
+                    <!-- 1-Click Subscribe Action Buttons -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                        <!-- Apple Calendar / Outlook / Default App -->
+                        <a
+                            :href="calendarFeed?.webcalUrl"
+                            class="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-border-subtle bg-surface-subdued hover:bg-surface hover:border-primary/40 text-xs font-medium text-content-primary transition-all shadow-xs"
+                        >
+                            <Icon name="calendar" :size="16" class="text-primary" />
+                            <span>Add to Apple / Outlook (webcal)</span>
+                        </a>
+
+                        <!-- Google Calendar Subscribe Link -->
+                        <a
+                            :href="googleCalendarSubscribeUrl"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-border-subtle bg-surface-subdued hover:bg-surface hover:border-primary/40 text-xs font-medium text-content-primary transition-all shadow-xs"
+                        >
+                            <Icon name="external-link" :size="16" class="text-primary" />
+                            <span>Subscribe in Google Calendar</span>
+                        </a>
+                    </div>
+
+                    <!-- Regenerate Link Section -->
+                    <div class="pt-3 border-t border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                            <p class="text-xs font-medium text-content-primary">
+                                Need to revoke access?
+                            </p>
+                            <p class="text-[11px] text-content-muted mt-0.5">
+                                Regenerating creates a fresh token and immediately invalidates all previous calendar subscriptions.
+                            </p>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            :loading="regeneratingCalendarToken"
+                            @click="regenerateCalendarToken"
+                            class="text-status-danger hover:bg-status-danger/10 hover:text-status-danger shrink-0"
+                        >
+                            <Icon name="restore" :size="14" class="mr-1.5" />
+                            Regenerate Link
+                        </Button>
                     </div>
                 </div>
             </Card>

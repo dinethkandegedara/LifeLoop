@@ -33,7 +33,11 @@ const user = computed(() => (page.props.auth as any)?.user);
 const mobileMenuOpen = ref(false);
 
 function handleNavigate(tab: string) {
-    if (tab === 'tasks') {
+    if (tab === 'schedule') {
+        if (!['today', 'week', 'month', 'schedule'].includes(props.currentTab)) {
+            router.visit('/');
+        }
+    } else if (tab === 'tasks') {
         if (props.currentTab !== 'tasks') {
             router.visit('/tasks');
         }
@@ -41,14 +45,10 @@ function handleNavigate(tab: string) {
         if (props.currentTab !== 'reports') {
             router.visit('/reports');
         }
-    } else if (['today', 'week', 'month'].includes(tab)) {
-        if (props.currentTab === 'tasks' || props.currentTab === 'settings' || props.currentTab === 'reports') {
-            router.visit(tab === 'today' ? '/' : `/?view=${tab}`);
-        } else {
-            emit('navigate', tab);
+    } else if (tab === 'settings') {
+        if (props.currentTab !== 'settings') {
+            router.visit('/settings');
         }
-    } else {
-        emit('navigate', tab);
     }
     mobileMenuOpen.value = false;
 }
@@ -119,18 +119,17 @@ watch(
                         <nav class="flex-1 space-y-1">
                             <button
                                 v-for="item in [
-                                    { id: 'today', label: 'Today', icon: 'clock' },
-                                    { id: 'week', label: 'Week', icon: 'calendar' },
-                                    { id: 'month', label: 'Month', icon: 'calendar' },
-                                    { id: 'reports', label: 'Reports', icon: 'chart' },
+                                    { id: 'schedule', label: 'Schedule', icon: 'calendar' },
                                     { id: 'tasks', label: 'All Tasks', icon: 'tasks' },
+                                    { id: 'reports', label: 'Reports', icon: 'chart' },
+                                    { id: 'settings', label: 'Settings', icon: 'settings' },
                                 ]"
                                 :key="item.id"
                                 type="button"
                                 @click="handleNavigate(item.id)"
                                 :class="[
                                     'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer text-left',
-                                    currentTab === item.id
+                                    (item.id === 'schedule' ? (currentTab === 'schedule' || ['today', 'week', 'month'].includes(currentTab)) : currentTab === item.id)
                                         ? 'bg-primary-subdued text-primary font-semibold'
                                         : 'text-content-secondary hover:text-content-primary hover:bg-surface-hover',
                                 ]"
@@ -138,20 +137,6 @@ watch(
                                 <Icon :name="item.icon" :size="18" />
                                 <span>{{ item.label }}</span>
                             </button>
-
-                            <Link
-                                href="/settings"
-                                @click="mobileMenuOpen = false"
-                                :class="[
-                                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer text-left',
-                                    currentTab === 'settings'
-                                        ? 'bg-primary-subdued text-primary font-semibold'
-                                        : 'text-content-secondary hover:text-content-primary hover:bg-surface-hover',
-                                ]"
-                            >
-                                <Icon name="settings" :size="18" />
-                                <span>Settings</span>
-                            </Link>
                         </nav>
 
                         <!-- Mobile User Info & Logout -->

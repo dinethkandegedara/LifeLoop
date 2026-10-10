@@ -68,6 +68,10 @@ Route::middleware(['auth', 'verified.otp'])->group(function () {
 
     Route::get('/settings', [SettingsController::class, 'edit'])->name('settings.edit');
     Route::put('/settings', [SettingsController::class, 'update'])->name('settings.update');
+    Route::post('/settings/email/send-otp', [SettingsController::class, 'sendEmailOtp'])->name('settings.email.send-otp');
+    Route::put('/settings/email', [SettingsController::class, 'updateEmail'])->name('settings.email.update');
+    Route::post('/settings/password/send-otp', [SettingsController::class, 'sendPasswordOtp'])->name('settings.password.send-otp');
+    Route::put('/settings/password', [SettingsController::class, 'updatePassword'])->name('settings.password.update');
 
     Route::get('/tasks', [TaskController::class, 'index'])->name('tasks.index');
     Route::post('/tasks', [TaskController::class, 'store'])->name('tasks.store');

@@ -40,14 +40,15 @@ class ScheduleReportingService
 
             case 'month':
                 $start = $today->copy()->startOfMonth();
-                $end = $today->copy()->endOfMonth();
-                $label = $start->format('F Y');
+                $monthEnd = $today->copy()->endOfMonth();
+                $end = $today->isBefore($monthEnd) ? $today->copy()->endOfDay() : $monthEnd;
+                $label = $start->format('F Y') . ($today->isBefore($monthEnd) ? ' (To Date: ' . $start->format('M d') . ' – ' . $end->format('M d') . ')' : '');
                 break;
 
             case 'all':
-                // All-time: from 1 year ago to 30 days ahead
+                // All-time: from 1 year ago to today
                 $start = $today->copy()->subYear()->startOfDay();
-                $end = $today->copy()->addDays(30)->endOfDay();
+                $end = $today->copy()->endOfDay();
                 $label = 'All Time';
                 break;
 
@@ -61,8 +62,9 @@ class ScheduleReportingService
             default:
                 // Monday to Sunday standard week
                 $start = $today->copy()->startOfWeek();
-                $end = $today->copy()->endOfWeek();
-                $label = 'This Week (' . $start->format('M d') . ' – ' . $end->format('M d, Y') . ')';
+                $weekEnd = $today->copy()->endOfWeek();
+                $end = $today->isBefore($weekEnd) ? $today->copy()->endOfDay() : $weekEnd;
+                $label = 'This Week (' . $start->format('M d') . ($start->toDateString() !== $end->toDateString() ? ' – ' . $end->format('M d, Y') : ', ' . $start->format('Y')) . ')';
                 $period = 'week';
                 break;
         }

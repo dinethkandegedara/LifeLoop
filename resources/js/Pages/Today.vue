@@ -457,22 +457,19 @@ function submitWorkSession() {
 <template>
     <Head :title="`${calendarView.toUpperCase()} - LifeLoop`" />
 
-    <AppLayout :current-tab="calendarView" @navigate="handleSidebarNavigate">
-        <!-- TOP VIEW SELECTOR & THEME TOGGLE -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <div class="flex items-center gap-3">
-                <SegmentedControl
-                    :model-value="calendarView"
-                    @update:model-value="switchCalendarView($event as any)"
-                    :options="[
-                        { label: 'Today', value: 'today' },
-                        { label: 'Week', value: 'week' },
-                        { label: 'Month', value: 'month' },
-                    ]"
-                />
-            </div>
-
-            <div class="flex items-center gap-2">
+    <AppLayout current-tab="schedule" @navigate="handleSidebarNavigate">
+        <!-- TOP PAGE HEADER WITH TITLE, GREETING & PRIMARY ACTIONS -->
+        <PageHeader
+            :title="calendarView === 'today' ? `${greeting}, ${userName}` : calendarView === 'week' ? 'Weekly Calendar' : 'Monthly Overview'"
+            :subtitle="
+                calendarView === 'today'
+                    ? 'Track scheduled occurrences and focus sessions'
+                    : calendarView === 'week'
+                    ? `7-day commitment overview in ${userTimezone} timezone`
+                    : `Monthly distribution in ${userTimezone} timezone`
+            "
+        >
+            <template #actions>
                 <Button
                     variant="secondary"
                     size="sm"
@@ -490,30 +487,41 @@ function submitWorkSession() {
                     Log Work
                 </Button>
                 <ThemeToggle variant="button" />
+            </template>
+        </PageHeader>
+
+        <!-- CONSOLIDATED DASHBOARD CONTROL TOOLBAR -->
+        <div class="p-3 sm:p-3.5 rounded-2xl bg-surface border border-border-subtle shadow-xs mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <!-- Left: Today / Week / Month Switcher -->
+            <div class="flex items-center">
+                <SegmentedControl
+                    :model-value="calendarView"
+                    @update:model-value="switchCalendarView($event as any)"
+                    :options="[
+                        { label: 'Today', value: 'today' },
+                        { label: 'Week', value: 'week' },
+                        { label: 'Month', value: 'month' },
+                    ]"
+                />
             </div>
-        </div>
 
-        <!-- PAGE HEADER -->
-        <PageHeader
-            :title="calendarView === 'today' ? `${greeting}, ${userName}` : calendarView === 'week' ? 'Weekly Calendar' : 'Monthly Overview'"
-            :subtitle="calendarView === 'today' ? `${formattedSelectedDate} • Daily Execution` : `Scheduled sessions in ${userTimezone} timezone`"
-        />
-
-        <!-- DATE NAVIGATION BAR (FOR TODAY VIEW) -->
-        <Card v-if="calendarView === 'today'" compact class="mb-6 bg-surface border-border-subtle">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <div class="flex items-center gap-2">
+            <!-- Right: Contextual Date Navigator (In Today View) -->
+            <div v-if="calendarView === 'today'" class="flex flex-wrap items-center gap-2">
+                <!-- Day Stepper: Prev / Today / Next -->
+                <div class="flex items-center gap-1 bg-surface-subdued border border-border-subtle/80 rounded-xl p-1">
                     <Button
                         variant="ghost"
                         size="sm"
                         @click="navigateDay(-1)"
+                        title="Previous Day"
+                        class="px-2"
                     >
-                        &larr; Prev Day
+                        <Icon name="chevron-left" :size="16" />
                     </Button>
                     <Button
-                        variant="secondary"
+                        variant="ghost"
                         size="sm"
-                        :class="isToday ? 'border-primary/40 text-primary font-semibold' : ''"
+                        :class="isToday ? 'bg-primary/10 text-primary font-semibold' : 'text-content-secondary'"
                         @click="goToToday"
                     >
                         Today
@@ -522,27 +530,35 @@ function submitWorkSession() {
                         variant="ghost"
                         size="sm"
                         @click="navigateDay(1)"
+                        title="Next Day"
+                        class="px-2"
                     >
-                        Next Day &rarr;
+                        <Icon name="chevron-right" :size="16" />
                     </Button>
                 </div>
 
-                <div class="flex items-center gap-2 text-xs text-content-secondary">
-                    <span class="font-medium text-content-primary">{{ formattedSelectedDate }}</span>
-                    <Badge v-if="isToday" variant="extra" size="sm">Today</Badge>
-                    <Badge v-else variant="neutral" size="sm">Selected</Badge>
-                </div>
+                <!-- Single Interactive Date Pill (Clicking anywhere opens native picker) -->
+                <div class="relative flex items-center">
+                    <label
+                        class="group flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-subdued hover:bg-surface-hover border border-border-subtle hover:border-primary/40 text-xs font-medium text-content-primary cursor-pointer transition-all shadow-2xs"
+                        title="Click to jump to date"
+                    >
+                        <Icon name="calendar" :size="14" class="text-primary group-hover:scale-110 transition-transform" />
+                        <span class="font-semibold">{{ formattedSelectedDate }}</span>
+                        <Badge v-if="isToday" variant="extra" size="sm">Today</Badge>
+                        <Badge v-else variant="neutral" size="sm">Selected</Badge>
 
-                <div class="flex items-center gap-2">
-                    <input
-                        type="date"
-                        :value="selectedDate"
-                        class="text-xs bg-surface-subdued text-content-primary border border-border-subtle rounded-xl px-2.5 py-1 focus:ring-1 focus:ring-primary outline-none cursor-pointer"
-                        @change="goToSpecificDate(($event.target as HTMLInputElement).value)"
-                    />
+                        <!-- Native hidden date input covering the label -->
+                        <input
+                            type="date"
+                            :value="selectedDate"
+                            class="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            @change="goToSpecificDate(($event.target as HTMLInputElement).value)"
+                        />
+                    </label>
                 </div>
             </div>
-        </Card>
+        </div>
 
         <!-- VIEW 1: TODAY WORKSPACE -->
         <div v-if="calendarView === 'today'">

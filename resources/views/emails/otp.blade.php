@@ -19,6 +19,10 @@
                             <h1 style="margin: 0; font-size: 20px; font-weight: 700; color: #111827; letter-spacing: -0.02em;">
                                 @if($purpose === 'password_reset')
                                     Password Reset Code
+                                @elseif($purpose === 'password_change')
+                                    Password Change Code
+                                @elseif($purpose === 'email_change')
+                                    Email Verification Code
                                 @else
                                     Verify Your Email
                                 @endif
@@ -26,6 +30,10 @@
                             <p style="margin: 8px 0 0; font-size: 13px; color: #6b7280; line-height: 1.5;">
                                 @if($purpose === 'password_reset')
                                     Use the 6-digit code below to securely reset your LifeLoop password.
+                                @elseif($purpose === 'password_change')
+                                    Use the 6-digit code below to verify and update your LifeLoop password.
+                                @elseif($purpose === 'email_change')
+                                    Use the 6-digit code below to authorize changing your account email address.
                                 @else
                                     Thank you for joining LifeLoop. Enter this 6-digit code to complete verification.
                                 @endif

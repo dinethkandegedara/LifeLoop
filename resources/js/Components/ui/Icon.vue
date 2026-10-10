@@ -111,6 +111,16 @@ const iconSize = computed(() => {
             <path d="m6 9 6 6 6-6" />
         </g>
 
+        <!-- Chevron Left -->
+        <g v-else-if="name === 'chevron-left'">
+            <path d="m15 18-6-6 6-6" />
+        </g>
+
+        <!-- Chevron Right -->
+        <g v-else-if="name === 'chevron-right'">
+            <path d="m9 18 6-6-6-6" />
+        </g>
+
         <!-- More Vertical -->
         <g v-else-if="name === 'more-vertical'">
             <circle cx="12" cy="12" r="1" />
@@ -189,6 +199,23 @@ const iconSize = computed(() => {
         <!-- Spinner / Loader -->
         <g v-else-if="name === 'loader'">
             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+        </g>
+
+        <!-- Lock -->
+        <g v-else-if="name === 'lock'">
+            <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </g>
+
+        <!-- Mail -->
+        <g v-else-if="name === 'mail'">
+            <rect width="20" height="16" x="2" y="4" rx="2" />
+            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+        </g>
+
+        <!-- Shield -->
+        <g v-else-if="name === 'shield'">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         </g>
 
         <!-- Fallback dot -->

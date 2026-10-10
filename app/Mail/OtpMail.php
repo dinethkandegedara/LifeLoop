@@ -19,9 +19,12 @@ class OtpMail extends Mailable
 
     public function envelope(): Envelope
     {
-        $subject = $this->purpose === 'password_reset'
-            ? 'LifeLoop - Password Reset Code'
-            : 'LifeLoop - Email Verification Code';
+        $subject = match ($this->purpose) {
+            'password_reset' => 'LifeLoop - Password Reset Code',
+            'password_change' => 'LifeLoop - Password Change Security Code',
+            'email_change' => 'LifeLoop - Email Change Verification Code',
+            default => 'LifeLoop - Email Verification Code',
+        };
 
         return new Envelope(
             subject: $subject,

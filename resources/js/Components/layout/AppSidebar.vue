@@ -2,7 +2,6 @@
 import { computed } from 'vue';
 import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import Icon from '@/Components/ui/Icon.vue';
-import ThemeToggle from '@/Components/ui/ThemeToggle.vue';
 import AppLogo from '@/Components/ui/AppLogo.vue';
 
 const props = defineProps<{
@@ -26,15 +25,17 @@ const initials = computed(() => {
 });
 
 const navItems = [
-    { id: 'today', label: 'Today', icon: 'clock', badge: '3', href: '/' },
-    { id: 'week', label: 'Week', icon: 'calendar', href: '/' },
-    { id: 'month', label: 'Month', icon: 'calendar', href: '/' },
-    { id: 'reports', label: 'Reports', icon: 'chart', href: '/reports' },
+    { id: 'schedule', label: 'Schedule', icon: 'calendar', href: '/' },
     { id: 'tasks', label: 'All Tasks', icon: 'tasks', href: '/tasks' },
+    { id: 'reports', label: 'Reports', icon: 'chart', href: '/reports' },
+    { id: 'settings', label: 'Settings', icon: 'settings', href: '/settings' },
 ];
 
-function handleItemClick(item: (typeof navItems)[number]) {
-    emit('navigate', item.id);
+function isItemActive(item: (typeof navItems)[number]): boolean {
+    if (item.id === 'schedule') {
+        return props.currentTab === 'schedule' || ['today', 'week', 'month'].includes(props.currentTab);
+    }
+    return props.currentTab === item.id;
 }
 
 function logout() {
@@ -55,14 +56,13 @@ function logout() {
 
         <!-- Navigation Links -->
         <nav class="flex-1 px-3 py-4 space-y-1">
-            <button
+            <Link
                 v-for="item in navItems"
                 :key="item.id"
-                type="button"
-                @click="handleItemClick(item)"
+                :href="item.href"
                 :class="[
                     'w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer group',
-                    currentTab === item.id
+                    isItemActive(item)
                         ? 'bg-primary-subdued text-primary font-semibold'
                         : 'text-content-secondary hover:text-content-primary hover:bg-surface-hover',
                 ]"
@@ -71,50 +71,15 @@ function logout() {
                     <Icon
                         :name="item.icon"
                         :size="18"
-                        :class="currentTab === item.id ? 'text-primary' : 'text-content-muted group-hover:text-content-secondary'"
+                        :class="isItemActive(item) ? 'text-primary' : 'text-content-muted group-hover:text-content-secondary'"
                     />
                     <span>{{ item.label }}</span>
                 </div>
-
-                <span
-                    v-if="item.badge"
-                    :class="[
-                        'text-xs font-medium px-2 py-0.5 rounded-full',
-                        currentTab === item.id
-                            ? 'bg-primary/20 text-primary'
-                            : 'bg-surface-subdued text-content-muted',
-                    ]"
-                >
-                    {{ item.badge }}
-                </span>
-            </button>
-
-            <!-- Settings Link -->
-            <Link
-                href="/settings"
-                :class="[
-                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer group',
-                    currentTab === 'settings'
-                        ? 'bg-primary-subdued text-primary font-semibold'
-                        : 'text-content-secondary hover:text-content-primary hover:bg-surface-hover',
-                ]"
-            >
-                <Icon
-                    name="settings"
-                    :size="18"
-                    :class="currentTab === 'settings' ? 'text-primary' : 'text-content-muted group-hover:text-content-secondary'"
-                />
-                <span>Settings</span>
             </Link>
         </nav>
 
         <!-- Sidebar Footer -->
-        <div class="p-4 border-t border-border-subtle space-y-4">
-            <div class="flex items-center justify-between">
-                <span class="text-xs font-medium text-content-secondary">Theme</span>
-                <ThemeToggle variant="segmented" />
-            </div>
-
+        <div class="p-4 border-t border-border-subtle">
             <!-- User Profile Avatar Card with Logout -->
             <div v-if="user" class="p-2.5 rounded-xl bg-surface-subdued border border-border-subtle space-y-2">
                 <div class="flex items-center gap-2.5">

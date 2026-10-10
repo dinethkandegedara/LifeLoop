@@ -1076,15 +1076,6 @@ function formatSingleRuleDescription(sched: TaskSchedule): string {
                             Unscheduled
                         </Badge>
 
-                        <!-- History Protection Indicator -->
-                        <Badge
-                            v-if="task.has_history"
-                            variant="neutral"
-                            size="sm"
-                            title="Has historical records — protected from accidental deletion"
-                        >
-                            Protected History
-                        </Badge>
                     </div>
 
                     <!-- Description -->

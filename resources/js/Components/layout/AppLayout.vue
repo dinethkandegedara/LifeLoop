@@ -32,10 +32,16 @@ const user = computed(() => (page.props.auth as any)?.user);
 const mobileMenuOpen = ref(false);
 
 function handleNavigate(tab: string) {
-    if (tab === 'today' && props.currentTab !== 'today') {
-        router.visit('/');
-    } else if (tab === 'tasks' && props.currentTab !== 'tasks') {
-        router.visit('/tasks');
+    if (tab === 'tasks') {
+        if (props.currentTab !== 'tasks') {
+            router.visit('/tasks');
+        }
+    } else if (['today', 'week', 'month'].includes(tab)) {
+        if (props.currentTab === 'tasks' || props.currentTab === 'settings') {
+            router.visit(tab === 'today' ? '/' : `/?view=${tab}`);
+        } else {
+            emit('navigate', tab);
+        }
     } else {
         emit('navigate', tab);
     }

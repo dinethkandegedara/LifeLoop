@@ -61,4 +61,72 @@ class WorkSessionController extends Controller
 
         return back()->with('success', 'Work session recorded successfully.');
     }
+
+    /**
+     * Update an existing work session.
+     */
+    public function update(\App\Http\Requests\UpdateWorkSessionRequest $request, WorkSession $workSession): RedirectResponse|JsonResponse
+    {
+        $this->authorize('update', $workSession);
+
+        if ($request->filled('task_id')) {
+            $task = Task::where('user_id', $request->user()->id)->findOrFail($request->input('task_id'));
+            $workSession->task_id = $task->id;
+        }
+
+        if ($request->has('schedule_occurrence_id')) {
+            $occurrenceId = $request->input('schedule_occurrence_id');
+            if ($occurrenceId) {
+                $occ = ScheduleOccurrence::where('user_id', $request->user()->id)->findOrFail($occurrenceId);
+                $workSession->schedule_occurrence_id = $occ->id;
+            } else {
+                $workSession->schedule_occurrence_id = null;
+            }
+        }
+
+        if ($request->filled('started_at')) {
+            $workSession->started_at = $request->input('started_at');
+        }
+
+        if ($request->filled('duration_minutes')) {
+            $workSession->duration_minutes = (int) $request->input('duration_minutes');
+        }
+
+        if ($request->has('ended_at')) {
+            $workSession->ended_at = $request->input('ended_at');
+        }
+
+        if ($request->has('notes')) {
+            $workSession->notes = $request->input('notes');
+        }
+
+        $workSession->save();
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'message' => 'Work session updated successfully.',
+                'work_session' => $workSession->fresh(['task:id,title', 'occurrence']),
+            ]);
+        }
+
+        return back()->with('success', 'Work session updated successfully.');
+    }
+
+    /**
+     * Delete a work session.
+     */
+    public function destroy(Request $request, WorkSession $workSession): RedirectResponse|JsonResponse
+    {
+        $this->authorize('delete', $workSession);
+
+        $workSession->delete();
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'message' => 'Work session deleted successfully.',
+            ]);
+        }
+
+        return back()->with('success', 'Work session deleted successfully.');
+    }
 }

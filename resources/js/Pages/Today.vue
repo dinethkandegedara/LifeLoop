@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { Head, usePage, router } from '@inertiajs/vue3';
+import axios from 'axios';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/layout/PageHeader.vue';
 import Card from '@/Components/ui/Card.vue';
@@ -10,9 +11,11 @@ import Dialog from '@/Components/ui/Dialog.vue';
 import Input from '@/Components/ui/Input.vue';
 import Select, { type SelectOption } from '@/Components/ui/Select.vue';
 import SegmentedControl from '@/Components/ui/SegmentedControl.vue';
-import EmptyState from '@/Components/ui/EmptyState.vue';
 import Icon from '@/Components/ui/Icon.vue';
 import ThemeToggle from '@/Components/ui/ThemeToggle.vue';
+import TodayView from '@/Components/calendar/TodayView.vue';
+import WeekView from '@/Components/calendar/WeekView.vue';
+import MonthView from '@/Components/calendar/MonthView.vue';
 import { useToast } from '@/composables/useToast';
 
 interface Task {
@@ -66,27 +69,43 @@ interface WorkSession {
     } | null;
 }
 
-const props = defineProps<{
-    tasks: Task[];
-    occurrences: ScheduleOccurrence[];
-    todayWorkSessions: WorkSession[];
-    recentWorkSessions: WorkSession[];
-    todayDate: string;
-    selectedDate: string;
-    userTimezone: string;
-}>();
+const props = withDefaults(
+    defineProps<{
+        tasks: Task[];
+        occurrences: ScheduleOccurrence[];
+        todayWorkSessions: WorkSession[];
+        recentWorkSessions: WorkSession[];
+        todayDate: string;
+        selectedDate: string;
+        userTimezone: string;
+        currentView?: 'today' | 'week' | 'month';
+        rangeStart?: string;
+        rangeEnd?: string;
+        rangeWorkSessions?: WorkSession[];
+        overdueOccurrences?: ScheduleOccurrence[];
+    }>(),
+    {
+        currentView: 'today',
+        rangeStart: '',
+        rangeEnd: '',
+        rangeWorkSessions: () => [],
+        overdueOccurrences: () => [],
+    }
+);
 
 const page = usePage();
 const toast = useToast();
 
-const currentNav = ref('today');
-const activeHistoryTab = ref<'selected' | 'all'>('selected');
-
-watch(currentNav, (nav) => {
-    if (nav === 'tasks') {
-        router.visit('/tasks');
+// Active calendar view ('today' | 'week' | 'month')
+const calendarView = ref<'today' | 'week' | 'month'>(props.currentView || 'today');
+watch(
+    () => props.currentView,
+    (v) => {
+        if (v && v !== calendarView.value) {
+            calendarView.value = v;
+        }
     }
-});
+);
 
 const userName = computed(() => {
     const user = (page.props.auth as any)?.user;
@@ -96,10 +115,12 @@ const userName = computed(() => {
     return 'Friend';
 });
 
+const isToday = computed(() => props.selectedDate === props.todayDate);
+
 const formattedSelectedDate = computed(() => {
     if (!props.selectedDate) return '';
-    const parts = props.selectedDate.split('-');
-    const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    const parts = props.selectedDate.split('-').map(Number);
+    const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
     return new Intl.DateTimeFormat('en-US', {
         weekday: 'long',
         month: 'short',
@@ -108,8 +129,6 @@ const formattedSelectedDate = computed(() => {
     }).format(dateObj);
 });
 
-const isToday = computed(() => props.selectedDate === props.todayDate);
-
 const greeting = computed(() => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -117,103 +136,138 @@ const greeting = computed(() => {
     return 'Good evening';
 });
 
-// Summary calculations
-const totalPlannedHours = computed(() => {
-    const mins = props.occurrences.reduce((acc, occ) => acc + (occ.duration_minutes || 0), 0);
-    return (mins / 60).toFixed(1);
-});
+// ==========================================
+// NAVIGATION & CONTEXT PRESERVATION
+// ==========================================
+function switchCalendarView(newView: 'today' | 'week' | 'month') {
+    if (calendarView.value === newView) return;
+    calendarView.value = newView;
+    router.get(
+        '/',
+        { view: newView, date: props.selectedDate },
+        { preserveState: true, preserveScroll: true }
+    );
+}
 
-const totalWorkedSelectedDateHours = computed(() => {
-    const mins = props.todayWorkSessions.reduce((acc, ws) => acc + (ws.duration_minutes || 0), 0);
-    return (mins / 60).toFixed(1);
-});
+function handleSidebarNavigate(tab: string) {
+    if (tab === 'tasks') {
+        router.visit('/tasks');
+    } else if (['today', 'week', 'month'].includes(tab)) {
+        switchCalendarView(tab as any);
+    }
+}
 
-const totalAuditWorkedHours = computed(() => {
-    const mins = props.recentWorkSessions.reduce((acc, ws) => acc + (ws.duration_minutes || 0), 0);
-    return (mins / 60).toFixed(1);
-});
+function drillToDay(dateStr: string) {
+    calendarView.value = 'today';
+    router.get(
+        '/',
+        { view: 'today', date: dateStr },
+        { preserveState: true, preserveScroll: true }
+    );
+}
 
-const completedOccurrencesCount = computed(() => {
-    return props.occurrences.filter((o) => o.status === 'completed').length;
-});
-
-const completionPercentage = computed(() => {
-    if (props.occurrences.length === 0) return 0;
-    return Math.round((completedOccurrencesCount.value / props.occurrences.length) * 100);
-});
-
-// Date Navigation
-function navigateDate(offsetDays: number) {
-    const parts = props.selectedDate.split('-');
-    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+function navigateDay(offsetDays: number) {
+    const parts = props.selectedDate.split('-').map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
     d.setDate(d.getDate() + offsetDays);
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     const targetDate = `${yyyy}-${mm}-${dd}`;
-    goToDate(targetDate);
+    router.get(
+        '/',
+        { view: 'today', date: targetDate },
+        { preserveState: true, preserveScroll: true }
+    );
+}
+
+function navigateWeek(offsetWeeks: number) {
+    const parts = props.selectedDate.split('-').map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    d.setDate(d.getDate() + offsetWeeks * 7);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const targetDate = `${yyyy}-${mm}-${dd}`;
+    router.get(
+        '/',
+        { view: 'week', date: targetDate },
+        { preserveState: true, preserveScroll: true }
+    );
+}
+
+function navigateMonth(offsetMonths: number) {
+    const parts = props.selectedDate.split('-').map(Number);
+    const d = new Date(parts[0], parts[1] - 1, 1);
+    d.setMonth(d.getMonth() + offsetMonths);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const targetDate = `${yyyy}-${mm}-${dd}`;
+    router.get(
+        '/',
+        { view: 'month', date: targetDate },
+        { preserveState: true, preserveScroll: true }
+    );
 }
 
 function goToToday() {
-    goToDate(props.todayDate);
-}
-
-function goToDate(dateString: string) {
     router.get(
         '/',
-        { date: dateString },
-        {
-            preserveState: true,
-            preserveScroll: true,
-        }
+        { view: calendarView.value, date: props.todayDate },
+        { preserveState: true, preserveScroll: true }
     );
 }
 
-// Occurrence actions
-const actionLoadingId = ref<number | null>(null);
-
-function markOccurrenceComplete(occ: ScheduleOccurrence) {
-    actionLoadingId.value = occ.id;
-    router.patch(
-        `/occurrences/${occ.id}/complete`,
-        {},
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                toast.success('Occurrence marked completed!');
-            },
-            onError: () => {
-                toast.danger('Failed to complete occurrence.');
-            },
-            onFinish: () => {
-                actionLoadingId.value = null;
-            },
-        }
-    );
-}
-
-function reopenOccurrence(occ: ScheduleOccurrence) {
-    actionLoadingId.value = occ.id;
-    router.patch(
-        `/occurrences/${occ.id}/reopen`,
-        {},
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                toast.info('Occurrence reopened. All recorded work sessions remain completely intact.');
-            },
-            onError: () => {
-                toast.danger('Failed to reopen occurrence.');
-            },
-            onFinish: () => {
-                actionLoadingId.value = null;
-            },
-        }
+function goToSpecificDate(dateStr: string) {
+    if (!dateStr) return;
+    router.get(
+        '/',
+        { view: calendarView.value, date: dateStr },
+        { preserveState: true, preserveScroll: true }
     );
 }
 
 // ==========================================
-// RECORD WORK SESSION MODAL
+// OPTIMISTIC OCCURRENCE STATUS TOGGLE
+// ==========================================
+const actionLoadingIds = ref<Set<number>>(new Set());
+
+async function toggleOccurrenceStatus(occ: ScheduleOccurrence) {
+    if (actionLoadingIds.value.has(occ.id)) return; // Prevent duplicate clicks
+
+    const originalStatus = occ.status;
+    const originalCompletedAt = occ.completed_at;
+    const isNowCompleting = originalStatus !== 'completed';
+
+    // 1. Optimistic Mutation
+    actionLoadingIds.value.add(occ.id);
+    occ.status = isNowCompleting ? 'completed' : 'pending';
+    occ.completed_at = isNowCompleting ? new Date().toISOString() : null;
+
+    try {
+        const endpoint = isNowCompleting
+            ? `/occurrences/${occ.id}/complete`
+            : `/occurrences/${occ.id}/reopen`;
+
+        await axios.patch(endpoint, {}, {
+            headers: { Accept: 'application/json' },
+        });
+
+        toast.success(isNowCompleting ? 'Occurrence marked completed!' : 'Occurrence reopened.');
+    } catch (err: any) {
+        // Rollback state on network/server error
+        occ.status = originalStatus;
+        occ.completed_at = originalCompletedAt;
+        const msg = err.response?.data?.message || 'Failed to update occurrence status.';
+        toast.danger(msg);
+    } finally {
+        actionLoadingIds.value.delete(occ.id);
+    }
+}
+
+// ==========================================
+// RECORD WORK SESSION MODAL (ACCESSIBLE IN ALL VIEWS)
 // ==========================================
 const workModalOpen = ref(false);
 const workTaskId = ref<number | ''>('');
@@ -242,7 +296,7 @@ const occurrenceOptions = computed<SelectOption[]>(() => {
     relevantOccurrences.forEach((occ) => {
         const timeFormatted = occ.start_time.substring(0, 5);
         list.push({
-            label: `[Occurrence #${occ.id}] ${occ.scheduled_date} at ${timeFormatted} (${(occ.duration_minutes / 60).toFixed(1)} hrs planned)`,
+            label: `[#${occ.id}] ${occ.scheduled_date} at ${timeFormatted} (${(occ.duration_minutes / 60).toFixed(1)}h planned)`,
             value: occ.id,
         });
     });
@@ -261,24 +315,74 @@ watch(workOccurrenceId, (newOccId) => {
     }
 });
 
+// Edit & Delete Work Session State
+const isEditingWorkSession = ref(false);
+const editingWorkSessionId = ref<number | null>(null);
+
+const deleteWorkModalOpen = ref(false);
+const sessionToDelete = ref<WorkSession | null>(null);
+const isDeletingWork = ref(false);
+
 function openWorkModalForOccurrence(occ: ScheduleOccurrence) {
+    isEditingWorkSession.value = false;
+    editingWorkSessionId.value = null;
     workTaskId.value = occ.task_id;
     workOccurrenceId.value = occ.id;
     workDate.value = occ.scheduled_date;
     workTime.value = occ.start_time.substring(0, 5);
     workDurationMinutes.value = occ.duration_minutes || 120;
-    workNotes.value = `Completed scheduled session for ${occ.task.title}`;
+    workNotes.value = `Completed session for ${occ.task.title}`;
     workModalOpen.value = true;
 }
 
-function openWorkModalAdHoc(presetDuration = 60) {
+function openWorkModalAdHoc(dateStr?: string, presetDuration = 60) {
+    isEditingWorkSession.value = false;
+    editingWorkSessionId.value = null;
     workTaskId.value = props.tasks.length > 0 ? props.tasks[0].id : '';
     workOccurrenceId.value = '';
-    workDate.value = props.selectedDate;
+    workDate.value = dateStr || props.selectedDate;
     workTime.value = '14:00';
     workDurationMinutes.value = presetDuration;
-    workNotes.value = 'Ad-hoc work session on unscheduled day';
+    workNotes.value = '';
     workModalOpen.value = true;
+}
+
+function openEditWorkSessionModal(ws: WorkSession) {
+    isEditingWorkSession.value = true;
+    editingWorkSessionId.value = ws.id;
+    workTaskId.value = ws.task_id;
+    workOccurrenceId.value = ws.schedule_occurrence_id || '';
+    workDate.value = ws.started_at ? ws.started_at.substring(0, 10) : props.selectedDate;
+    workTime.value = ws.started_at ? ws.started_at.substring(11, 16) : '10:00';
+    workDurationMinutes.value = ws.duration_minutes || 60;
+    workNotes.value = ws.notes || '';
+    workModalOpen.value = true;
+}
+
+function openDeleteWorkModal(ws: WorkSession) {
+    sessionToDelete.value = ws;
+    deleteWorkModalOpen.value = true;
+}
+
+function confirmDeleteWorkSession() {
+    if (!sessionToDelete.value) return;
+
+    isDeletingWork.value = true;
+    router.delete(`/work-sessions/${sessionToDelete.value.id}`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            deleteWorkModalOpen.value = false;
+            sessionToDelete.value = null;
+            toast.success('Work session deleted successfully!');
+        },
+        onError: (errors) => {
+            const first = Object.values(errors)[0] as string;
+            toast.danger(first || 'Failed to delete work session.');
+        },
+        onFinish: () => {
+            isDeletingWork.value = false;
+        },
+    });
 }
 
 function submitWorkSession() {
@@ -298,101 +402,111 @@ function submitWorkSession() {
     const startedAt = `${workDate.value} ${workTime.value}:00`;
 
     workSubmitting.value = true;
-    router.post(
-        '/work-sessions',
-        {
-            task_id: Number(workTaskId.value),
-            schedule_occurrence_id: workOccurrenceId.value ? Number(workOccurrenceId.value) : null,
-            started_at: startedAt,
-            duration_minutes: Number(workDurationMinutes.value),
-            notes: workNotes.value.trim() || null,
-        },
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                workModalOpen.value = false;
-                activeHistoryTab.value = 'all'; // Switch to show all sessions so unscheduled entries are immediately visible
-                toast.success('Actual work session recorded successfully!');
-            },
-            onError: (errors) => {
-                const first = Object.values(errors)[0] as string;
-                toast.danger(first || 'Failed to record work session.');
-            },
-            onFinish: () => {
-                workSubmitting.value = false;
-            },
-        }
-    );
-}
+    const payload = {
+        task_id: Number(workTaskId.value),
+        schedule_occurrence_id: workOccurrenceId.value ? Number(workOccurrenceId.value) : null,
+        started_at: startedAt,
+        duration_minutes: Number(workDurationMinutes.value),
+        notes: workNotes.value.trim() || null,
+    };
 
-// Helpers
-function formatMinutes(minutes: number): string {
-    const hours = (minutes / 60).toFixed(1);
-    const unit = Number(hours) === 1 ? 'hr' : 'hrs';
-    return `${hours} ${unit} (${minutes}m)`;
-}
-
-function formatTimeOnly(timeStr: string): string {
-    if (!timeStr) return '';
-    return timeStr.substring(0, 5);
+    if (isEditingWorkSession.value && editingWorkSessionId.value) {
+        router.put(
+            `/work-sessions/${editingWorkSessionId.value}`,
+            payload,
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    workModalOpen.value = false;
+                    isEditingWorkSession.value = false;
+                    editingWorkSessionId.value = null;
+                    toast.success('Work session updated successfully!');
+                },
+                onError: (errors) => {
+                    const first = Object.values(errors)[0] as string;
+                    toast.danger(first || 'Failed to update work session.');
+                },
+                onFinish: () => {
+                    workSubmitting.value = false;
+                },
+            }
+        );
+    } else {
+        router.post(
+            '/work-sessions',
+            payload,
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    workModalOpen.value = false;
+                    toast.success('Work session recorded successfully!');
+                },
+                onError: (errors) => {
+                    const first = Object.values(errors)[0] as string;
+                    toast.danger(first || 'Failed to record work session.');
+                },
+                onFinish: () => {
+                    workSubmitting.value = false;
+                },
+            }
+        );
+    }
 }
 </script>
 
 <template>
-    <Head title="Today - LifeLoop" />
+    <Head :title="`${calendarView.toUpperCase()} - LifeLoop`" />
 
-    <AppLayout :current-tab="currentNav" @navigate="currentNav = $event">
-        <!-- Top Navigation Bar & Action Row -->
+    <AppLayout :current-tab="calendarView" @navigate="handleSidebarNavigate">
+        <!-- TOP VIEW SELECTOR & THEME TOGGLE -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <SegmentedControl
-                v-model="currentNav"
-                :options="[
-                    { label: 'Schedule & Focus', value: 'today' },
-                    { label: 'Tasks', value: 'tasks' },
-                ]"
-            />
-
             <div class="flex items-center gap-3">
+                <SegmentedControl
+                    :model-value="calendarView"
+                    @update:model-value="switchCalendarView($event as any)"
+                    :options="[
+                        { label: 'Today', value: 'today' },
+                        { label: 'Week', value: 'week' },
+                        { label: 'Month', value: 'month' },
+                    ]"
+                />
+            </div>
+
+            <div class="flex items-center gap-2">
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="tasks"
+                    @click="router.visit('/tasks')"
+                >
+                    Manage Tasks
+                </Button>
+                <Button
+                    variant="primary"
+                    size="sm"
+                    icon="plus"
+                    @click="openWorkModalAdHoc()"
+                >
+                    Log Work
+                </Button>
                 <ThemeToggle variant="button" />
             </div>
         </div>
 
-        <!-- Page Header with Primary Actions -->
+        <!-- PAGE HEADER -->
         <PageHeader
-            :title="`${greeting}, ${userName}`"
-            :subtitle="`${formattedSelectedDate} • Focus & Daily Execution`"
-        >
-            <template #actions>
-                <div class="flex items-center gap-2">
-                    <Button
-                        id="btn-goto-manage-tasks"
-                        variant="secondary"
-                        icon="tasks"
-                        @click="router.visit('/tasks')"
-                        title="Configure recurrence rules and task occurrences in Manage Tasks"
-                    >
-                        Manage Tasks & Schedules
-                    </Button>
-                    <Button
-                        id="btn-log-work"
-                        variant="primary"
-                        icon="plus"
-                        @click="openWorkModalAdHoc(60)"
-                    >
-                        Log Work Session
-                    </Button>
-                </div>
-            </template>
-        </PageHeader>
+            :title="calendarView === 'today' ? `${greeting}, ${userName}` : calendarView === 'week' ? 'Weekly Calendar' : 'Monthly Overview'"
+            :subtitle="calendarView === 'today' ? `${formattedSelectedDate} • Daily Execution` : `Scheduled sessions in ${userTimezone} timezone`"
+        />
 
-        <!-- Date Navigator Bar -->
-        <Card compact class="mb-6 bg-surface border-border-subtle">
+        <!-- DATE NAVIGATION BAR (FOR TODAY VIEW) -->
+        <Card v-if="calendarView === 'today'" compact class="mb-6 bg-surface border-border-subtle">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div class="flex items-center gap-2">
                     <Button
                         variant="ghost"
                         size="sm"
-                        @click="navigateDate(-1)"
+                        @click="navigateDay(-1)"
                     >
                         &larr; Prev Day
                     </Button>
@@ -407,7 +521,7 @@ function formatTimeOnly(timeStr: string): string {
                     <Button
                         variant="ghost"
                         size="sm"
-                        @click="navigateDate(1)"
+                        @click="navigateDay(1)"
                     >
                         Next Day &rarr;
                     </Button>
@@ -416,493 +530,249 @@ function formatTimeOnly(timeStr: string): string {
                 <div class="flex items-center gap-2 text-xs text-content-secondary">
                     <span class="font-medium text-content-primary">{{ formattedSelectedDate }}</span>
                     <Badge v-if="isToday" variant="extra" size="sm">Today</Badge>
-                    <Badge v-else variant="neutral" size="sm">Viewing Date</Badge>
+                    <Badge v-else variant="neutral" size="sm">Selected</Badge>
                 </div>
 
                 <div class="flex items-center gap-2">
                     <input
                         type="date"
                         :value="selectedDate"
-                        class="text-xs bg-surface-subdued text-content-primary border border-border-subtle rounded px-2.5 py-1 focus:ring-1 focus:ring-primary outline-none"
-                        @change="goToDate(($event.target as HTMLInputElement).value)"
+                        class="text-xs bg-surface-subdued text-content-primary border border-border-subtle rounded-xl px-2.5 py-1 focus:ring-1 focus:ring-primary outline-none cursor-pointer"
+                        @change="goToSpecificDate(($event.target as HTMLInputElement).value)"
                     />
                 </div>
             </div>
         </Card>
 
-        <!-- Summary Metrics Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <!-- Planned Hours -->
-            <Card compact>
-                <div class="flex items-center justify-between text-xs text-content-secondary">
-                    <span>Planned Time</span>
-                    <Icon name="clock" :size="15" class="text-accent" />
-                </div>
-                <p class="text-2xl font-bold tracking-tight text-content-primary mt-2">
-                    {{ totalPlannedHours }} <span class="text-sm font-normal text-content-muted">hrs</span>
-                </p>
-                <div class="mt-2 text-[11px] text-content-muted">
-                    {{ occurrences.length }} scheduled occurrence{{ occurrences.length === 1 ? '' : 's' }}
-                </div>
-            </Card>
-
-            <!-- Actual Worked Today -->
-            <Card compact>
-                <div class="flex items-center justify-between text-xs text-content-secondary">
-                    <span>Actual Work (Selected Day)</span>
-                    <Icon name="check-circle" :size="15" class="text-status-success" />
-                </div>
-                <p class="text-2xl font-bold tracking-tight text-content-primary mt-2">
-                    {{ totalWorkedSelectedDateHours }} <span class="text-sm font-normal text-content-muted">hrs</span>
-                </p>
-                <div class="mt-2 text-[11px] text-status-success flex items-center gap-1 font-medium">
-                    <span>{{ todayWorkSessions.length }} session{{ todayWorkSessions.length === 1 ? '' : 's' }} recorded</span>
-                </div>
-            </Card>
-
-            <!-- Completion Status -->
-            <Card compact>
-                <div class="flex items-center justify-between text-xs text-content-secondary">
-                    <span>Completion Rate</span>
-                    <Icon name="tasks" :size="15" class="text-primary" />
-                </div>
-                <p class="text-2xl font-bold tracking-tight text-content-primary mt-2">
-                    {{ completionPercentage }}%
-                </p>
-                <div class="mt-2 text-[11px] text-content-muted">
-                    {{ completedOccurrencesCount }} of {{ occurrences.length }} completed
-                </div>
-            </Card>
-
-            <!-- Total Audit Log Intact -->
-            <Card compact>
-                <div class="flex items-center justify-between text-xs text-content-secondary">
-                    <span>Total Audit Sessions</span>
-                    <Icon name="flame" :size="15" class="text-primary" />
-                </div>
-                <p class="text-2xl font-bold tracking-tight text-primary mt-2">
-                    {{ totalAuditWorkedHours }} <span class="text-sm font-normal text-content-muted">hrs</span>
-                </p>
-                <div class="mt-2 text-[11px] text-content-muted">
-                    {{ recentWorkSessions.length }} sessions intact in audit trail
-                </div>
-            </Card>
+        <!-- VIEW 1: TODAY WORKSPACE -->
+        <div v-if="calendarView === 'today'">
+            <TodayView
+                :occurrences="occurrences"
+                :today-work-sessions="todayWorkSessions"
+                :overdue-occurrences="overdueOccurrences"
+                :selected-date="selectedDate"
+                :today-date="todayDate"
+                :action-loading-ids="actionLoadingIds"
+                @toggle-occurrence="toggleOccurrenceStatus"
+                @log-work-for-occurrence="openWorkModalForOccurrence"
+                @log-work-ad-hoc="openWorkModalAdHoc()"
+                @manage-tasks="router.visit('/tasks')"
+                @edit-work-session="openEditWorkSessionModal"
+                @delete-work-session="openDeleteWorkModal"
+            />
         </div>
 
-        <!-- MAIN LAYOUT: Occurrences & Audit History -->
-        <div class="space-y-8">
-            <!-- SECTION 1: SCHEDULED OCCURRENCES FOR THIS DAY -->
-            <div class="space-y-4">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border-subtle pb-3">
-                    <div>
-                        <h2 class="text-base font-semibold text-content-primary tracking-tight flex items-center gap-2">
-                            <span>Today's Planned Occurrences</span>
-                            <Badge variant="neutral" size="sm">{{ occurrences.length }}</Badge>
-                        </h2>
-                        <p class="text-xs text-content-secondary">
-                            Execute your scheduled blocks: mark complete, reopen, or record actual focus work. (To configure rules, visit Manage Tasks &gt; Edit Task).
-                        </p>
-                    </div>
-
-                    <Button
-                        id="btn-edit-schedules"
-                        variant="ghost"
-                        size="sm"
-                        icon="edit"
-                        @click="router.visit('/tasks')"
-                    >
-                        Edit Schedules in Tasks &rarr;
-                    </Button>
-                </div>
-
-                <!-- EMPTY STATE FOR OCCURRENCES -->
-                <div v-if="occurrences.length === 0">
-                    <EmptyState
-                        title="No occurrences scheduled for this day"
-                        description="Schedules and recurring rules are configured per-task. Go to Manage Tasks > Edit Task to plan occurrences for this day."
-                        icon="calendar"
-                    >
-                        <template #action>
-                            <Button
-                                id="btn-goto-tasks-empty"
-                                variant="primary"
-                                icon="tasks"
-                                @click="router.visit('/tasks')"
-                            >
-                                Go to Manage Tasks &rarr;
-                            </Button>
-                        </template>
-                    </EmptyState>
-                </div>
-
-                <!-- LIST OF OCCURRENCES -->
-                <div v-else class="space-y-3">
-                    <div
-                        v-for="occ in occurrences"
-                        :key="occ.id"
-                        :id="`occurrence-card-${occ.id}`"
-                        :class="[
-                            'group rounded-xl border p-4.5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4',
-                            'bg-surface hover:border-border-strong',
-                            occ.status === 'completed'
-                                ? 'border-status-success/30 bg-surface-subdued/40'
-                                : 'border-border-subtle shadow-xs',
-                        ]"
-                    >
-                        <div class="flex items-start md:items-center gap-3.5 min-w-0">
-                            <!-- Status Indicator Icon -->
-                            <div
-                                :class="[
-                                    'w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors',
-                                    occ.status === 'completed'
-                                        ? 'bg-status-success-subdued text-status-success'
-                                        : 'bg-primary-subdued text-primary',
-                                ]"
-                            >
-                                <Icon
-                                    :name="occ.status === 'completed' ? 'check-circle' : 'clock'"
-                                    :size="18"
-                                />
-                            </div>
-
-                            <!-- Occurrence Details -->
-                            <div class="min-w-0">
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    <h3
-                                        :class="[
-                                            'text-sm font-semibold tracking-tight transition-colors',
-                                            occ.status === 'completed'
-                                                ? 'text-content-secondary line-through'
-                                                : 'text-content-primary',
-                                        ]"
-                                    >
-                                        {{ occ.task?.title || 'Untitled Task' }}
-                                    </h3>
-
-                                    <!-- Status Badges -->
-                                    <Badge
-                                        v-if="occ.status === 'completed'"
-                                        variant="completed"
-                                        size="sm"
-                                        dot
-                                    >
-                                        Completed
-                                    </Badge>
-                                    <Badge
-                                        v-else-if="occ.status === 'pending'"
-                                        variant="planned"
-                                        size="sm"
-                                        dot
-                                    >
-                                        Pending
-                                    </Badge>
-                                    <Badge
-                                        v-else
-                                        variant="neutral"
-                                        size="sm"
-                                    >
-                                        {{ occ.status }}
-                                    </Badge>
-
-                                    <!-- Recorded Work Indicator -->
-                                    <span
-                                        v-if="occ.work_sessions && occ.work_sessions.length > 0"
-                                        class="text-xs bg-primary-subdued/70 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-medium flex items-center gap-1"
-                                    >
-                                        <Icon name="check" :size="12" />
-                                        {{ occ.work_sessions.length }} session{{ occ.work_sessions.length === 1 ? '' : 's' }} recorded ({{ formatMinutes(occ.work_sessions.reduce((s, w) => s + w.duration_minutes, 0)) }})
-                                    </span>
-                                </div>
-
-                                <div class="flex flex-wrap items-center gap-3 text-xs text-content-muted mt-1.5">
-                                    <span class="flex items-center gap-1 font-mono text-content-secondary">
-                                        <Icon name="clock" :size="12" />
-                                        {{ formatTimeOnly(occ.start_time) }}
-                                    </span>
-                                    <span>&bull;</span>
-                                    <span>Planned: {{ formatMinutes(occ.duration_minutes) }}</span>
-                                    <span v-if="occ.recurring_schedule">&bull;</span>
-                                    <span v-if="occ.recurring_schedule" class="capitalize">
-                                        {{ occ.recurring_schedule.type.replace('_', ' ') }}
-                                    </span>
-                                    <span v-if="occ.completed_at">&bull;</span>
-                                    <span v-if="occ.completed_at" class="text-status-success">
-                                        Done at {{ occ.completed_at.substring(11, 16) }}
-                                    </span>
-                                </div>
-
-                                <p v-if="occ.notes" class="text-xs text-content-secondary mt-1">
-                                    {{ occ.notes }}
-                                </p>
-                            </div>
-                        </div>
-
-                        <!-- Action Controls -->
-                        <div class="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-border-subtle">
-                            <!-- Record Actual Work Button -->
-                            <Button
-                                :id="`btn-record-work-${occ.id}`"
-                                variant="subtle"
-                                size="sm"
-                                icon="clock"
-                                @click="openWorkModalForOccurrence(occ)"
-                            >
-                                Record Work
-                            </Button>
-
-                            <!-- Complete / Reopen Action -->
-                            <Button
-                                v-if="occ.status === 'pending'"
-                                :id="`btn-complete-${occ.id}`"
-                                variant="secondary"
-                                size="sm"
-                                icon="check"
-                                :loading="actionLoadingId === occ.id"
-                                @click="markOccurrenceComplete(occ)"
-                            >
-                                Mark Complete
-                            </Button>
-
-                            <Button
-                                v-else-if="occ.status === 'completed'"
-                                :id="`btn-reopen-${occ.id}`"
-                                variant="secondary"
-                                size="sm"
-                                icon="restore"
-                                :loading="actionLoadingId === occ.id"
-                                class="text-accent hover:text-accent font-medium"
-                                @click="reopenOccurrence(occ)"
-                            >
-                                Reopen
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- SECTION 2: RECORDED WORK SESSIONS & AUDIT TRAIL -->
-            <div class="space-y-4 pt-4 border-t border-border-subtle">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                        <h2 class="text-base font-semibold text-content-primary tracking-tight flex items-center gap-2">
-                            <span>Recorded Work Sessions & Audit History</span>
-                            <Badge variant="extra" size="sm">
-                                {{ recentWorkSessions.length }} Total Intact
-                            </Badge>
-                        </h2>
-                        <p class="text-xs text-content-secondary">
-                            Immutable audit trail of actual time spent. Preserved permanently even when occurrences are completed or reopened.
-                        </p>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <SegmentedControl
-                            v-model="activeHistoryTab"
-                            size="sm"
-                            :options="[
-                                { label: 'Selected Day (' + todayWorkSessions.length + ')', value: 'selected' },
-                                { label: 'All Sessions (' + recentWorkSessions.length + ')', value: 'all' },
-                            ]"
-                        />
-
-                        <Button
-                            id="btn-log-adhoc-work"
-                            variant="primary"
-                            size="sm"
-                            icon="plus"
-                            @click="openWorkModalAdHoc(60)"
-                        >
-                            Log Unscheduled Work (1h)
-                        </Button>
-                    </div>
-                </div>
-
-                <!-- INTEGRITY GUARANTEE CALLOUT BANNER -->
-                <div class="rounded-lg bg-surface-subdued/50 border border-primary/20 p-3.5 flex items-start gap-3">
-                    <Icon name="sparkles" :size="18" class="text-primary shrink-0 mt-0.5" />
-                    <div class="text-xs space-y-0.5 text-content-secondary">
-                        <p class="font-medium text-content-primary">
-                            Historical Integrity Protection Active
-                        </p>
-                        <p>
-                            Work session records are independent entities. When you reopen or modify a schedule occurrence, all recorded work sessions, timestamps, durations, and notes remain <strong>completely intact and unmodified</strong>.
-                        </p>
-                    </div>
-                </div>
-
-                <!-- WORK SESSIONS LIST -->
-                <div v-if="(activeHistoryTab === 'selected' ? todayWorkSessions : recentWorkSessions).length === 0">
-                    <EmptyState
-                        title="No work sessions recorded yet"
-                        description="Use 'Record Work' on an occurrence or 'Log Unscheduled Work' to start building your work history."
-                        icon="clock"
-                    >
-                        <template #action>
-                            <Button
-                                id="btn-empty-log-work"
-                                variant="secondary"
-                                icon="plus"
-                                @click="openWorkModalAdHoc(60)"
-                            >
-                                Log 1 Hour Unscheduled Work
-                            </Button>
-                        </template>
-                    </EmptyState>
-                </div>
-
-                <div v-else class="space-y-2.5">
-                    <div
-                        v-for="ws in (activeHistoryTab === 'selected' ? todayWorkSessions : recentWorkSessions)"
-                        :key="ws.id"
-                        :id="`work-session-card-${ws.id}`"
-                        class="rounded-xl border border-border-subtle bg-surface p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-border-strong transition-colors"
-                    >
-                        <div class="flex items-center gap-3.5 min-w-0">
-                            <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                                <Icon name="clock" :size="16" />
-                            </div>
-
-                            <div class="min-w-0">
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    <span class="text-sm font-semibold text-content-primary">
-                                        {{ ws.task?.title || 'Task #' + ws.task_id }}
-                                    </span>
-
-                                    <!-- Duration Pill -->
-                                    <Badge variant="planned" size="sm">
-                                        {{ formatMinutes(ws.duration_minutes) }}
-                                    </Badge>
-
-                                    <!-- Occurrence Linkage Status -->
-                                    <Badge
-                                        v-if="ws.schedule_occurrence_id"
-                                        variant="extra"
-                                        size="sm"
-                                        dot
-                                    >
-                                        Occurrence #{{ ws.schedule_occurrence_id }}
-                                    </Badge>
-                                    <Badge
-                                        v-else
-                                        variant="neutral"
-                                        size="sm"
-                                    >
-                                        Unscheduled / Ad-hoc
-                                    </Badge>
-                                </div>
-
-                                <div class="flex items-center gap-2 text-xs text-content-muted mt-1">
-                                    <span>Started: {{ ws.started_at }}</span>
-                                    <span v-if="ws.notes">&bull;</span>
-                                    <span v-if="ws.notes" class="text-content-secondary italic">"{{ ws.notes }}"</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center gap-2 text-xs font-mono text-content-muted self-end sm:self-auto">
-                            <span class="text-status-success font-medium">✓ Intact</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <!-- VIEW 2: WEEK CALENDAR -->
+        <div v-else-if="calendarView === 'week'">
+            <WeekView
+                :occurrences="occurrences"
+                :selected-date="selectedDate"
+                :today-date="todayDate"
+                :range-start="rangeStart"
+                :range-end="rangeEnd"
+                :action-loading-ids="actionLoadingIds"
+                @navigate-week="navigateWeek"
+                @go-to-today="goToToday"
+                @drill-to-day="drillToDay"
+                @toggle-occurrence="toggleOccurrenceStatus"
+                @log-work-for-occurrence="openWorkModalForOccurrence"
+            />
         </div>
 
-        <!-- ========================================== -->
-        <!-- DIALOG: RECORD ACTUAL WORK SESSION         -->
-        <!-- ========================================== -->
+        <!-- VIEW 3: MONTH CALENDAR -->
+        <div v-else-if="calendarView === 'month'">
+            <MonthView
+                :occurrences="occurrences"
+                :range-work-sessions="rangeWorkSessions"
+                :selected-date="selectedDate"
+                :today-date="todayDate"
+                :range-start="rangeStart"
+                :range-end="rangeEnd"
+                :action-loading-ids="actionLoadingIds"
+                @navigate-month="navigateMonth"
+                @go-to-today="goToToday"
+                @drill-to-day="drillToDay"
+                @toggle-occurrence="toggleOccurrenceStatus"
+                @log-work-for-occurrence="openWorkModalForOccurrence"
+                @log-work-ad-hoc-date="openWorkModalAdHoc($event)"
+            />
+        </div>
+
+        <!-- UNIFIED RECORD / EDIT WORK SESSION MODAL -->
         <Dialog
             :open="workModalOpen"
-            title="Record Work Session"
-            description="Log actual time spent on a task. Work records are preserved permanently in your history."
+            :title="isEditingWorkSession ? 'Edit Work Session' : 'Log Actual Work Session'"
             @close="workModalOpen = false"
         >
-            <div class="space-y-4">
-                <Select
-                    v-model="workTaskId"
-                    label="Task"
-                    placeholder="Select task"
-                    :options="taskOptions"
-                    required
-                />
+            <form @submit.prevent="submitWorkSession" class="space-y-4">
+                <p class="text-xs text-content-secondary">
+                    {{ isEditingWorkSession ? 'Update your recorded focus time or notes for this work session.' : 'Record time actually spent on a task. Work records are preserved in your audit trail.' }}
+                </p>
 
-                <Select
-                    v-model="workOccurrenceId"
-                    label="Link to Schedule Occurrence (Optional)"
-                    :options="occurrenceOptions"
-                    hint="Choose an occurrence to link this work session, or 'None' for ad-hoc unscheduled work."
-                />
-
-                <div class="grid grid-cols-2 gap-3">
-                    <Input
-                        v-model="workDate"
-                        type="date"
-                        label="Date"
-                        required
-                    />
-
-                    <Input
-                        v-model="workTime"
-                        type="time"
-                        label="Start Time"
+                <!-- Task Select -->
+                <div>
+                    <label class="block text-xs font-semibold text-content-primary mb-1">
+                        Task *
+                    </label>
+                    <Select
+                        v-model="workTaskId"
+                        :options="taskOptions"
+                        placeholder="Choose a task..."
                         required
                     />
                 </div>
 
+                <!-- Occurrence Link (Optional) -->
                 <div>
-                    <Input
-                        v-model="workDurationMinutes"
-                        type="number"
-                        label="Actual Duration (minutes)"
-                        placeholder="120"
-                        required
+                    <label class="block text-xs font-semibold text-content-primary mb-1">
+                        Linked Planned Occurrence (Optional)
+                    </label>
+                    <Select
+                        v-model="workOccurrenceId"
+                        :options="occurrenceOptions"
                     />
-                    <div class="flex items-center gap-2 mt-2">
-                        <span class="text-xs text-content-muted">Quick Presets:</span>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            class="text-xs py-0.5 px-2 h-6"
-                            @click="workDurationMinutes = 60"
-                        >
-                            1 hr (60m)
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            class="text-xs py-0.5 px-2 h-6 font-semibold text-primary"
-                            @click="workDurationMinutes = 120"
-                        >
-                            2 hrs (120m)
-                        </Button>
+                </div>
+
+                <!-- Date & Time -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-content-primary mb-1">
+                            Started Date *
+                        </label>
+                        <Input
+                            v-model="workDate"
+                            type="date"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-content-primary mb-1">
+                            Started Time *
+                        </label>
+                        <Input
+                            v-model="workTime"
+                            type="time"
+                            required
+                        />
                     </div>
                 </div>
 
-                <Input
-                    v-model="workNotes"
-                    label="Notes / Accomplishments"
-                    placeholder="What did you achieve during this session?"
-                />
-            </div>
+                <!-- Duration in Minutes with Quick Chips -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-semibold text-content-primary">
+                            Duration (Minutes) *
+                        </label>
+                        <span class="text-xs font-mono font-medium text-primary">
+                            {{ (workDurationMinutes / 60).toFixed(1) }} hrs
+                        </span>
+                    </div>
+                    <Input
+                        v-model.number="workDurationMinutes"
+                        type="number"
+                        min="1"
+                        step="1"
+                        required
+                    />
 
-            <template #actions>
-                <Button
-                    variant="ghost"
-                    :disabled="workSubmitting"
-                    @click="workModalOpen = false"
-                >
-                    Cancel
-                </Button>
-                <Button
-                    id="btn-submit-work"
-                    variant="primary"
-                    :loading="workSubmitting"
-                    @click="submitWorkSession"
-                >
-                    Save Work Session ({{ (workDurationMinutes / 60).toFixed(1) }} hrs)
-                </Button>
-            </template>
+                    <!-- Quick Preset Chips -->
+                    <div class="flex flex-wrap gap-1.5 mt-2">
+                        <button
+                            v-for="mins in [30, 60, 90, 120, 180]"
+                            :key="mins"
+                            type="button"
+                            :class="[
+                                'px-2 py-0.5 text-xs rounded-full border transition-all cursor-pointer',
+                                workDurationMinutes === mins
+                                    ? 'bg-primary text-primary-text border-primary font-bold shadow-xs'
+                                    : 'bg-surface text-content-secondary border-border-subtle hover:bg-surface-hover',
+                            ]"
+                            @click="workDurationMinutes = mins"
+                        >
+                            {{ mins / 60 }} {{ mins === 60 ? 'hr' : 'hrs' }}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <div>
+                    <label class="block text-xs font-semibold text-content-primary mb-1">
+                        Session Notes / Accomplishments
+                    </label>
+                    <textarea
+                        v-model="workNotes"
+                        rows="3"
+                        class="w-full text-xs bg-surface text-content-primary border border-border-subtle rounded-xl p-2.5 focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                        placeholder="What did you work on or finish?"
+                    />
+                </div>
+
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-border-subtle">
+                    <Button
+                        variant="ghost"
+                        type="button"
+                        @click="workModalOpen = false"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="primary"
+                        type="submit"
+                        :disabled="workSubmitting"
+                    >
+                        {{ workSubmitting ? (isEditingWorkSession ? 'Updating...' : 'Recording...') : (isEditingWorkSession ? 'Update Work Record' : 'Save Work Record') }}
+                    </Button>
+                </div>
+            </form>
+        </Dialog>
+
+        <!-- DELETE WORK SESSION CONFIRMATION DIALOG -->
+        <Dialog
+            :open="deleteWorkModalOpen"
+            title="Delete Work Session"
+            @close="deleteWorkModalOpen = false"
+        >
+            <div class="space-y-4">
+                <p class="text-xs text-content-secondary">
+                    Are you sure you want to delete this recorded work session?
+                </p>
+
+                <div v-if="sessionToDelete" class="p-3.5 rounded-2xl bg-surface-subdued border border-border-subtle text-xs space-y-1.5">
+                    <div class="font-bold text-content-primary text-sm">
+                        {{ sessionToDelete.task?.title || 'Focus Session' }}
+                    </div>
+                    <div class="text-[11px] text-content-muted flex items-center gap-2">
+                        <span>Started: {{ sessionToDelete.started_at ? sessionToDelete.started_at.substring(0, 16) : '' }}</span>
+                        <span>•</span>
+                        <span class="font-bold text-primary">{{ (sessionToDelete.duration_minutes / 60).toFixed(1) }} hrs</span>
+                    </div>
+                    <p v-if="sessionToDelete.notes" class="text-[11px] text-content-secondary italic pt-0.5">
+                        "{{ sessionToDelete.notes }}"
+                    </p>
+                </div>
+
+                <p class="text-[11px] text-status-danger font-medium">
+                    This action will remove this focus record from your schedule statistics and audit trail.
+                </p>
+
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-border-subtle">
+                    <Button
+                        variant="ghost"
+                        type="button"
+                        @click="deleteWorkModalOpen = false"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="danger"
+                        type="button"
+                        :disabled="isDeletingWork"
+                        @click="confirmDeleteWorkSession"
+                    >
+                        {{ isDeletingWork ? 'Deleting...' : 'Delete Work Record' }}
+                    </Button>
+                </div>
+            </div>
         </Dialog>
     </AppLayout>
 </template>

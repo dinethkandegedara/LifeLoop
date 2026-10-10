@@ -53,6 +53,14 @@ Route::middleware('auth')->group(function () {
 */
 Route::middleware(['auth', 'verified.otp'])->group(function () {
     Route::get('/', TodayController::class)->name('today');
+    Route::get('/week', function (\Illuminate\Http\Request $request, \App\Services\Scheduling\ScheduleManager $manager) {
+        $request->merge(['view' => 'week']);
+        return app(TodayController::class)($request, $manager);
+    })->name('calendar.week');
+    Route::get('/month', function (\Illuminate\Http\Request $request, \App\Services\Scheduling\ScheduleManager $manager) {
+        $request->merge(['view' => 'month']);
+        return app(TodayController::class)($request, $manager);
+    })->name('calendar.month');
 
     Route::get('/settings', [SettingsController::class, 'edit'])->name('settings.edit');
     Route::put('/settings', [SettingsController::class, 'update'])->name('settings.update');
@@ -80,6 +88,8 @@ Route::middleware(['auth', 'verified.otp'])->group(function () {
     // Work Sessions
     Route::get('/work-sessions', [WorkSessionController::class, 'index'])->name('work-sessions.index');
     Route::post('/work-sessions', [WorkSessionController::class, 'store'])->name('work-sessions.store');
+    Route::put('/work-sessions/{workSession}', [WorkSessionController::class, 'update'])->name('work-sessions.update');
+    Route::delete('/work-sessions/{workSession}', [WorkSessionController::class, 'destroy'])->name('work-sessions.destroy');
 
     Route::get('/foundation', function () {
         $dbStatus = 'Connected';

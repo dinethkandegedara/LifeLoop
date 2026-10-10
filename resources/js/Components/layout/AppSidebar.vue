@@ -32,13 +32,7 @@ const navItems = [
 ];
 
 function handleItemClick(item: (typeof navItems)[number]) {
-    if (item.id === 'today' && props.currentTab !== 'today') {
-        router.visit('/');
-    } else if (item.id === 'tasks' && props.currentTab !== 'tasks') {
-        router.visit('/tasks');
-    } else {
-        emit('navigate', item.id);
-    }
+    emit('navigate', item.id);
 }
 
 function logout() {

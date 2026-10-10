@@ -63,4 +63,28 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->hasMany(Task::class);
     }
+
+    /**
+     * Get the recurring schedules created by the user.
+     */
+    public function recurringSchedules(): HasMany
+    {
+        return $this->hasMany(RecurringSchedule::class);
+    }
+
+    /**
+     * Get the schedule occurrences for the user.
+     */
+    public function scheduleOccurrences(): HasMany
+    {
+        return $this->hasMany(ScheduleOccurrence::class);
+    }
+
+    /**
+     * Get the work sessions recorded by the user.
+     */
+    public function workSessions(): HasMany
+    {
+        return $this->hasMany(WorkSession::class);
+    }
 }

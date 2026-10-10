@@ -8,7 +8,7 @@ const props = withDefaults(
         open: boolean;
         title?: string;
         description?: string;
-        maxWidth?: 'sm' | 'md' | 'lg' | 'xl';
+        maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
     }>(),
     {
         maxWidth: 'md',
@@ -54,6 +54,10 @@ const maxWidthClass = {
     md: 'max-w-md',
     lg: 'max-w-lg',
     xl: 'max-w-xl',
+    '2xl': 'max-w-2xl',
+    '3xl': 'max-w-3xl',
+    '4xl': 'max-w-4xl',
+    '5xl': 'max-w-5xl',
 };
 </script>
 
@@ -83,7 +87,7 @@ const maxWidthClass = {
                 <!-- Dialog Content -->
                 <div
                     :class="[
-                        'relative w-full rounded-2xl bg-surface border border-border-subtle p-6 shadow-2xl z-10 transition-transform transform',
+                        'relative w-full rounded-2xl bg-surface border border-border-subtle p-5 sm:p-6 shadow-2xl z-10 transition-transform transform max-h-[92vh] overflow-y-auto',
                         maxWidthClass[maxWidth],
                     ]"
                 >

@@ -23,7 +23,15 @@ class TaskController extends Controller
         $search = $request->query('search');
         $status = $request->query('status', 'active'); // 'active', 'archived', 'all'
 
-        $query = $request->user()->tasks()->search($search);
+        $query = $request->user()->tasks()
+            ->with([
+                'activeRecurringSchedules',
+                'scheduleOccurrences' => fn ($q) => $q->where('status', '!=', 'cancelled')
+                    ->orderBy('scheduled_date', 'asc')
+                    ->orderBy('start_time', 'asc')
+                    ->limit(20),
+            ])
+            ->search($search);
 
         if ($status === 'active') {
             $query->active();
@@ -44,6 +52,28 @@ class TaskController extends Controller
                 'created_at' => $task->created_at?->toIso8601String(),
                 'created_at_human' => $task->created_at?->format('M j, Y'),
                 'archived_at' => $task->archived_at?->toIso8601String(),
+                'schedules' => $task->activeRecurringSchedules->map(fn ($s) => [
+                    'id' => $s->id,
+                    'type' => $s->type,
+                    'start_date' => $s->start_date?->toDateString(),
+                    'end_date' => $s->end_date?->toDateString(),
+                    'start_time' => $s->start_time,
+                    'duration_minutes' => $s->duration_minutes,
+                    'interval' => $s->interval,
+                    'weekdays' => $s->weekdays,
+                    'is_active' => $s->is_active,
+                ]),
+                'occurrences' => $task->scheduleOccurrences->map(fn ($o) => [
+                    'id' => $o->id,
+                    'recurring_schedule_id' => $o->recurring_schedule_id,
+                    'scheduled_date' => $o->scheduled_date?->toDateString(),
+                    'start_time' => $o->start_time,
+                    'duration_minutes' => $o->duration_minutes,
+                    'status' => $o->status,
+                    'is_exception' => $o->is_exception,
+                    'completed_at' => $o->completed_at?->toIso8601String(),
+                    'notes' => $o->notes,
+                ]),
             ]);
 
         $counts = [
@@ -59,6 +89,7 @@ class TaskController extends Controller
                 'status' => $status,
             ],
             'counts' => $counts,
+            'userTimezone' => $request->user()->timezone ?: 'UTC',
         ]);
     }
 
@@ -140,9 +171,11 @@ class TaskController extends Controller
         $this->authorize('delete', $task);
 
         if ($task->hasHistory()) {
-            return redirect()->back()->withErrors([
-                'delete' => 'Cannot permanently delete task because history exists. Archive the task instead to preserve records.',
-            ]);
+            return redirect()->back()
+                ->withErrors([
+                    'delete' => 'Cannot permanently delete task because history exists. Archive the task instead to preserve records.',
+                ])
+                ->with('error', 'Cannot permanently delete task because history exists. Archive the task instead to preserve records.');
         }
 
         $task->delete();

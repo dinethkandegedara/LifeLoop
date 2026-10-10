@@ -49,6 +49,38 @@ class Task extends Model
     }
 
     /**
+     * Recurring schedules created for this task.
+     */
+    public function recurringSchedules(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(RecurringSchedule::class);
+    }
+
+    /**
+     * Active recurring schedules for this task.
+     */
+    public function activeRecurringSchedules(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(RecurringSchedule::class)->where('is_active', true);
+    }
+
+    /**
+     * Planned schedule occurrences for this task.
+     */
+    public function scheduleOccurrences(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ScheduleOccurrence::class);
+    }
+
+    /**
+     * Actual work sessions recorded for this task.
+     */
+    public function workSessions(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(WorkSession::class);
+    }
+
+    /**
      * Scope query to only active tasks.
      */
     public function scopeActive(Builder $query): Builder
@@ -116,6 +148,21 @@ class Task extends Model
      */
     public function hasHistory(): bool
     {
-        return (bool) $this->has_history;
+        if ($this->has_history) {
+            return true;
+        }
+
+        if ($this->workSessions()->exists()) {
+            return true;
+        }
+
+        return $this->scheduleOccurrences()
+            ->where(function (Builder $q) {
+                $q->where('status', 'completed')
+                  ->orWhere('status', 'skipped')
+                  ->orWhere('is_exception', true)
+                  ->orWhereHas('workSessions');
+            })
+            ->exists();
     }
 }

@@ -5,42 +5,89 @@ import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/layout/PageHeader.vue';
 import Card from '@/Components/ui/Card.vue';
 import Button from '@/Components/ui/Button.vue';
-import IconButton from '@/Components/ui/IconButton.vue';
-import Checkbox from '@/Components/ui/Checkbox.vue';
 import Badge from '@/Components/ui/Badge.vue';
 import Dialog from '@/Components/ui/Dialog.vue';
 import Input from '@/Components/ui/Input.vue';
-import Select from '@/Components/ui/Select.vue';
+import Select, { type SelectOption } from '@/Components/ui/Select.vue';
 import SegmentedControl from '@/Components/ui/SegmentedControl.vue';
 import EmptyState from '@/Components/ui/EmptyState.vue';
-import Skeleton from '@/Components/ui/Skeleton.vue';
 import Icon from '@/Components/ui/Icon.vue';
 import ThemeToggle from '@/Components/ui/ThemeToggle.vue';
 import { useToast } from '@/composables/useToast';
 
-interface ScheduledTask {
-    id: string;
+interface Task {
+    id: number;
     title: string;
-    category: string;
-    startTime: string;
-    endTime: string;
-    plannedHours: number;
-    actualHours?: number;
-    completed: boolean;
-    isExtra?: boolean;
+    description: string | null;
+    status: 'active' | 'archived';
 }
+
+interface ScheduleOccurrence {
+    id: number;
+    task_id: number;
+    recurring_schedule_id: number | null;
+    scheduled_date: string;
+    start_time: string;
+    duration_minutes: number;
+    status: 'pending' | 'completed' | 'skipped' | 'cancelled';
+    is_exception: boolean;
+    completed_at: string | null;
+    notes: string | null;
+    task: {
+        id: number;
+        title: string;
+        description: string | null;
+    };
+    recurring_schedule?: {
+        id: number;
+        type: string;
+    } | null;
+    work_sessions?: WorkSession[];
+}
+
+interface WorkSession {
+    id: number;
+    user_id: number;
+    task_id: number;
+    schedule_occurrence_id: number | null;
+    started_at: string;
+    ended_at: string | null;
+    duration_minutes: number;
+    notes: string | null;
+    is_manual: boolean;
+    task?: {
+        id: number;
+        title: string;
+    };
+    occurrence?: {
+        id: number;
+        scheduled_date: string;
+        start_time: string;
+    } | null;
+}
+
+const props = defineProps<{
+    tasks: Task[];
+    occurrences: ScheduleOccurrence[];
+    todayWorkSessions: WorkSession[];
+    recentWorkSessions: WorkSession[];
+    todayDate: string;
+    selectedDate: string;
+    userTimezone: string;
+}>();
 
 const page = usePage();
 const toast = useToast();
 
 const currentNav = ref('today');
-const activeView = ref<'schedule' | 'empty' | 'loading'>('schedule');
+const activeHistoryTab = ref<'selected' | 'all'>('selected');
 
 watch(currentNav, (nav) => {
     if (nav === 'tasks') {
         router.visit('/tasks');
     }
 });
+
 const userName = computed(() => {
     const user = (page.props.auth as any)?.user;
     if (user?.name) {
@@ -49,13 +96,19 @@ const userName = computed(() => {
     return 'Friend';
 });
 
-const todayFormatted = computed(() => {
+const formattedSelectedDate = computed(() => {
+    if (!props.selectedDate) return '';
+    const parts = props.selectedDate.split('-');
+    const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
     return new Intl.DateTimeFormat('en-US', {
         weekday: 'long',
         month: 'short',
         day: 'numeric',
-    }).format(new Date());
+        year: 'numeric',
+    }).format(dateObj);
 });
+
+const isToday = computed(() => props.selectedDate === props.todayDate);
 
 const greeting = computed(() => {
     const hour = new Date().getHours();
@@ -64,128 +117,224 @@ const greeting = computed(() => {
     return 'Good evening';
 });
 
-// Mock Scheduled Tasks
-const tasks = ref<ScheduledTask[]>([
-    {
-        id: '1',
-        title: 'Core Architecture & Tenant Boundary Spec',
-        category: 'Architecture',
-        startTime: '09:00',
-        endTime: '11:30',
-        plannedHours: 2.5,
-        actualHours: 2.5,
-        completed: true,
-    },
-    {
-        id: '2',
-        title: 'Sanctum Session & CSRF Security Audit',
-        category: 'Security',
-        startTime: '11:45',
-        endTime: '12:45',
-        plannedHours: 1.0,
-        actualHours: 1.0,
-        completed: true,
-    },
-    {
-        id: '3',
-        title: 'Stakeholder Demo & Milestone Review',
-        category: 'Review',
-        startTime: '14:00',
-        endTime: '15:00',
-        plannedHours: 1.0,
-        completed: false,
-    },
-    {
-        id: '4',
-        title: 'Work Tracking Model & Variance Engine Tests',
-        category: 'Engineering',
-        startTime: '15:30',
-        endTime: '16:30',
-        plannedHours: 1.0,
-        completed: false,
-    },
-]);
-
-// Summary Calculations
-const totalPlanned = computed(() =>
-    tasks.value.reduce((acc, t) => acc + (t.isExtra ? 0 : t.plannedHours), 0)
-);
-
-const totalCompleted = computed(() =>
-    tasks.value
-        .filter((t) => t.completed)
-        .reduce((acc, t) => acc + (t.actualHours ?? t.plannedHours), 0)
-);
-
-const totalExtra = computed(() =>
-    tasks.value
-        .filter((t) => t.isExtra)
-        .reduce((acc, t) => acc + (t.actualHours ?? t.plannedHours), 0)
-);
-
-const completionPercentage = computed(() => {
-    if (totalPlanned.value === 0) return 0;
-    return Math.min(100, Math.round((totalCompleted.value / totalPlanned.value) * 100));
+// Summary calculations
+const totalPlannedHours = computed(() => {
+    const mins = props.occurrences.reduce((acc, occ) => acc + (occ.duration_minutes || 0), 0);
+    return (mins / 60).toFixed(1);
 });
 
-function toggleTask(id: string) {
-    const task = tasks.value.find((t) => t.id === id);
-    if (!task) return;
+const totalWorkedSelectedDateHours = computed(() => {
+    const mins = props.todayWorkSessions.reduce((acc, ws) => acc + (ws.duration_minutes || 0), 0);
+    return (mins / 60).toFixed(1);
+});
 
-    task.completed = !task.completed;
-    if (task.completed) {
-        if (!task.actualHours) {
-            task.actualHours = task.plannedHours;
-        }
-        toast.success(`Completed: ${task.title}`);
-    } else {
-        toast.info(`Reopened: ${task.title}`);
-    }
+const totalAuditWorkedHours = computed(() => {
+    const mins = props.recentWorkSessions.reduce((acc, ws) => acc + (ws.duration_minutes || 0), 0);
+    return (mins / 60).toFixed(1);
+});
+
+const completedOccurrencesCount = computed(() => {
+    return props.occurrences.filter((o) => o.status === 'completed').length;
+});
+
+const completionPercentage = computed(() => {
+    if (props.occurrences.length === 0) return 0;
+    return Math.round((completedOccurrencesCount.value / props.occurrences.length) * 100);
+});
+
+// Date Navigation
+function navigateDate(offsetDays: number) {
+    const parts = props.selectedDate.split('-');
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    d.setDate(d.getDate() + offsetDays);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const targetDate = `${yyyy}-${mm}-${dd}`;
+    goToDate(targetDate);
 }
 
-// Log Extra Work Dialog State
-const logModalOpen = ref(false);
-const newWorkTitle = ref('');
-const newWorkCategory = ref('Ad-hoc Support');
-const newWorkMinutes = ref(30);
-const newWorkNotes = ref('');
+function goToToday() {
+    goToDate(props.todayDate);
+}
 
-const categoryOptions = [
-    { label: 'Ad-hoc Support', value: 'Ad-hoc Support' },
-    { label: 'Unplanned Meeting', value: 'Unplanned Meeting' },
-    { label: 'Urgent Bug Fix', value: 'Urgent Bug Fix' },
-    { label: 'Code Review & Mentoring', value: 'Code Review' },
-    { label: 'Research & Spike', value: 'Research' },
-];
+function goToDate(dateString: string) {
+    router.get(
+        '/',
+        { date: dateString },
+        {
+            preserveState: true,
+            preserveScroll: true,
+        }
+    );
+}
 
-function submitExtraWork() {
-    if (!newWorkTitle.value.trim()) {
-        toast.danger('Please enter a task title');
+// Occurrence actions
+const actionLoadingId = ref<number | null>(null);
+
+function markOccurrenceComplete(occ: ScheduleOccurrence) {
+    actionLoadingId.value = occ.id;
+    router.patch(
+        `/occurrences/${occ.id}/complete`,
+        {},
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success('Occurrence marked completed!');
+            },
+            onError: () => {
+                toast.danger('Failed to complete occurrence.');
+            },
+            onFinish: () => {
+                actionLoadingId.value = null;
+            },
+        }
+    );
+}
+
+function reopenOccurrence(occ: ScheduleOccurrence) {
+    actionLoadingId.value = occ.id;
+    router.patch(
+        `/occurrences/${occ.id}/reopen`,
+        {},
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.info('Occurrence reopened. All recorded work sessions remain completely intact.');
+            },
+            onError: () => {
+                toast.danger('Failed to reopen occurrence.');
+            },
+            onFinish: () => {
+                actionLoadingId.value = null;
+            },
+        }
+    );
+}
+
+// ==========================================
+// RECORD WORK SESSION MODAL
+// ==========================================
+const workModalOpen = ref(false);
+const workTaskId = ref<number | ''>('');
+const workOccurrenceId = ref<number | ''>('');
+const workDate = ref(props.selectedDate);
+const workTime = ref('10:00');
+const workDurationMinutes = ref(120);
+const workNotes = ref('');
+const workSubmitting = ref(false);
+
+const taskOptions = computed<SelectOption[]>(() => {
+    return props.tasks.map((t) => ({
+        label: t.title,
+        value: t.id,
+    }));
+});
+
+const occurrenceOptions = computed<SelectOption[]>(() => {
+    const list: SelectOption[] = [
+        { label: 'None (Unscheduled / Ad-hoc Work)', value: '' },
+    ];
+    const relevantOccurrences = workTaskId.value
+        ? props.occurrences.filter((o) => o.task_id === Number(workTaskId.value))
+        : props.occurrences;
+
+    relevantOccurrences.forEach((occ) => {
+        const timeFormatted = occ.start_time.substring(0, 5);
+        list.push({
+            label: `[Occurrence #${occ.id}] ${occ.scheduled_date} at ${timeFormatted} (${(occ.duration_minutes / 60).toFixed(1)} hrs planned)`,
+            value: occ.id,
+        });
+    });
+
+    return list;
+});
+
+watch(workOccurrenceId, (newOccId) => {
+    if (newOccId) {
+        const occ = props.occurrences.find((o) => o.id === Number(newOccId));
+        if (occ) {
+            workTaskId.value = occ.task_id;
+            workDate.value = occ.scheduled_date;
+            workTime.value = occ.start_time.substring(0, 5);
+        }
+    }
+});
+
+function openWorkModalForOccurrence(occ: ScheduleOccurrence) {
+    workTaskId.value = occ.task_id;
+    workOccurrenceId.value = occ.id;
+    workDate.value = occ.scheduled_date;
+    workTime.value = occ.start_time.substring(0, 5);
+    workDurationMinutes.value = occ.duration_minutes || 120;
+    workNotes.value = `Completed scheduled session for ${occ.task.title}`;
+    workModalOpen.value = true;
+}
+
+function openWorkModalAdHoc(presetDuration = 60) {
+    workTaskId.value = props.tasks.length > 0 ? props.tasks[0].id : '';
+    workOccurrenceId.value = '';
+    workDate.value = props.selectedDate;
+    workTime.value = '14:00';
+    workDurationMinutes.value = presetDuration;
+    workNotes.value = 'Ad-hoc work session on unscheduled day';
+    workModalOpen.value = true;
+}
+
+function submitWorkSession() {
+    if (!workTaskId.value) {
+        toast.danger('Please select a task.');
+        return;
+    }
+    if (!workDate.value || !workTime.value) {
+        toast.danger('Please specify started date and time.');
+        return;
+    }
+    if (!workDurationMinutes.value || workDurationMinutes.value <= 0) {
+        toast.danger('Duration must be at least 1 minute.');
         return;
     }
 
-    const hours = Number((newWorkMinutes.value / 60).toFixed(2));
-    const newTask: ScheduledTask = {
-        id: `extra-${Date.now()}`,
-        title: newWorkTitle.value.trim(),
-        category: newWorkCategory.value,
-        startTime: 'Logged',
-        endTime: `${newWorkMinutes.value}m`,
-        plannedHours: 0,
-        actualHours: hours,
-        completed: true,
-        isExtra: true,
-    };
+    const startedAt = `${workDate.value} ${workTime.value}:00`;
 
-    tasks.value.unshift(newTask);
-    logModalOpen.value = false;
+    workSubmitting.value = true;
+    router.post(
+        '/work-sessions',
+        {
+            task_id: Number(workTaskId.value),
+            schedule_occurrence_id: workOccurrenceId.value ? Number(workOccurrenceId.value) : null,
+            started_at: startedAt,
+            duration_minutes: Number(workDurationMinutes.value),
+            notes: workNotes.value.trim() || null,
+        },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                workModalOpen.value = false;
+                activeHistoryTab.value = 'all'; // Switch to show all sessions so unscheduled entries are immediately visible
+                toast.success('Actual work session recorded successfully!');
+            },
+            onError: (errors) => {
+                const first = Object.values(errors)[0] as string;
+                toast.danger(first || 'Failed to record work session.');
+            },
+            onFinish: () => {
+                workSubmitting.value = false;
+            },
+        }
+    );
+}
 
-    toast.success('Extra work logged successfully', `${newTask.title} (+${newWorkMinutes.value} mins)`);
+// Helpers
+function formatMinutes(minutes: number): string {
+    const hours = (minutes / 60).toFixed(1);
+    const unit = Number(hours) === 1 ? 'hr' : 'hrs';
+    return `${hours} ${unit} (${minutes}m)`;
+}
 
-    // Reset form
-    newWorkTitle.value = '';
-    newWorkMinutes.value = 30;
-    newWorkNotes.value = '';
+function formatTimeOnly(timeStr: string): string {
+    if (!timeStr) return '';
+    return timeStr.substring(0, 5);
 }
 </script>
 
@@ -193,301 +342,565 @@ function submitExtraWork() {
     <Head title="Today - LifeLoop" />
 
     <AppLayout :current-tab="currentNav" @navigate="currentNav = $event">
-        <!-- Top Navigation & Controls Bar -->
+        <!-- Top Navigation Bar & Action Row -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <SegmentedControl
                 v-model="currentNav"
                 :options="[
-                    { label: 'Today', value: 'today' },
-                    { label: 'Week', value: 'week' },
-                    { label: 'Month', value: 'month' },
+                    { label: 'Schedule & Focus', value: 'today' },
                     { label: 'Tasks', value: 'tasks' },
                 ]"
             />
 
-            <div class="flex items-center gap-2 self-start sm:self-auto">
-                <!-- State Preview Toggle -->
-                <SegmentedControl
-                    v-model="activeView"
-                    size="sm"
-                    :options="[
-                        { label: 'Live Data', value: 'schedule' },
-                        { label: 'Empty State', value: 'empty' },
-                        { label: 'Skeleton', value: 'loading' },
-                    ]"
-                />
+            <div class="flex items-center gap-3">
                 <ThemeToggle variant="button" />
             </div>
         </div>
 
-        <!-- Page Header -->
+        <!-- Page Header with Primary Actions -->
         <PageHeader
             :title="`${greeting}, ${userName}`"
-            :subtitle="`${todayFormatted} • Focus Mode`"
+            :subtitle="`${formattedSelectedDate} • Focus & Daily Execution`"
         >
             <template #actions>
-                <Button
-                    variant="primary"
-                    icon="plus"
-                    @click="logModalOpen = true"
-                >
-                    Log Extra Work
-                </Button>
+                <div class="flex items-center gap-2">
+                    <Button
+                        id="btn-goto-manage-tasks"
+                        variant="secondary"
+                        icon="tasks"
+                        @click="router.visit('/tasks')"
+                        title="Configure recurrence rules and task occurrences in Manage Tasks"
+                    >
+                        Manage Tasks & Schedules
+                    </Button>
+                    <Button
+                        id="btn-log-work"
+                        variant="primary"
+                        icon="plus"
+                        @click="openWorkModalAdHoc(60)"
+                    >
+                        Log Work Session
+                    </Button>
+                </div>
             </template>
         </PageHeader>
 
-        <!-- SKELETON STATE PREVIEW -->
-        <div v-if="activeView === 'loading'" class="space-y-6">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Skeleton v-for="n in 4" :key="n" height="h-24" />
-            </div>
-            <div class="space-y-3">
-                <Skeleton v-for="n in 4" :key="n" height="h-18" />
-            </div>
-        </div>
-
-        <!-- EMPTY STATE PREVIEW -->
-        <div v-else-if="activeView === 'empty'" class="my-10">
-            <EmptyState
-                title="No tasks scheduled for today"
-                description="Your day is wide open. Enjoy the calm, or create your first scheduled block to start tracking actual focus time."
-                icon="calendar"
-            >
-                <template #action>
-                    <Button variant="primary" icon="plus" @click="activeView = 'schedule'">
-                        Schedule First Task
+        <!-- Date Navigator Bar -->
+        <Card compact class="mb-6 bg-surface border-border-subtle">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        @click="navigateDate(-1)"
+                    >
+                        &larr; Prev Day
                     </Button>
-                </template>
-            </EmptyState>
-        </div>
-
-        <!-- LIVE SCHEDULE VIEW -->
-        <div v-else class="space-y-8">
-            <!-- Summary Metrics Cards -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <!-- Planned Hours -->
-                <Card compact>
-                    <div class="flex items-center justify-between text-xs text-content-secondary">
-                        <span>Planned Hours</span>
-                        <Icon name="clock" :size="15" class="text-accent" />
-                    </div>
-                    <p class="text-2xl font-bold tracking-tight text-content-primary mt-2">
-                        {{ totalPlanned.toFixed(1) }} <span class="text-sm font-normal text-content-muted">hrs</span>
-                    </p>
-                    <div class="mt-2 text-[11px] text-content-muted">
-                        {{ tasks.filter((t) => !t.isExtra).length }} scheduled blocks
-                    </div>
-                </Card>
-
-                <!-- Completed Hours -->
-                <Card compact>
-                    <div class="flex items-center justify-between text-xs text-content-secondary">
-                        <span>Completed Work</span>
-                        <Icon name="check-circle" :size="15" class="text-status-success" />
-                    </div>
-                    <p class="text-2xl font-bold tracking-tight text-content-primary mt-2">
-                        {{ totalCompleted.toFixed(1) }} <span class="text-sm font-normal text-content-muted">hrs</span>
-                    </p>
-                    <div class="mt-2 text-[11px] text-status-success flex items-center gap-1 font-medium">
-                        <span>{{ completionPercentage }}% of planned time</span>
-                    </div>
-                </Card>
-
-                <!-- Remaining Hours -->
-                <Card compact>
-                    <div class="flex items-center justify-between text-xs text-content-secondary">
-                        <span>Remaining Focus</span>
-                        <Icon name="calendar" :size="15" class="text-content-muted" />
-                    </div>
-                    <p class="text-2xl font-bold tracking-tight text-content-primary mt-2">
-                        {{ Math.max(0, totalPlanned - totalCompleted).toFixed(1) }}
-                        <span class="text-sm font-normal text-content-muted">hrs</span>
-                    </p>
-                    <div class="mt-2 text-[11px] text-content-muted">
-                        {{ tasks.filter((t) => !t.completed && !t.isExtra).length }} sessions pending
-                    </div>
-                </Card>
-
-                <!-- Extra Work Logged -->
-                <Card compact>
-                    <div class="flex items-center justify-between text-xs text-content-secondary">
-                        <span>Extra Work</span>
-                        <Icon name="flame" :size="15" class="text-primary" />
-                    </div>
-                    <p class="text-2xl font-bold tracking-tight text-primary mt-2">
-                        {{ totalExtra.toFixed(1) }} <span class="text-sm font-normal text-content-muted">hrs</span>
-                    </p>
-                    <div class="mt-2 text-[11px] text-content-muted">
-                        {{ tasks.filter((t) => t.isExtra).length }} ad-hoc items
-                    </div>
-                </Card>
-            </div>
-
-            <!-- Progress Meter -->
-            <Card compact class="bg-surface">
-                <div class="flex items-center justify-between text-xs font-medium text-content-secondary mb-2">
-                    <span>Daily Progress</span>
-                    <span class="text-primary font-semibold">{{ completionPercentage }}%</span>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        :class="isToday ? 'border-primary/40 text-primary font-semibold' : ''"
+                        @click="goToToday"
+                    >
+                        Today
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        @click="navigateDate(1)"
+                    >
+                        Next Day &rarr;
+                    </Button>
                 </div>
-                <div class="w-full h-2 rounded-full bg-surface-subdued overflow-hidden">
-                    <div
-                        class="h-full bg-primary rounded-full transition-all duration-300 ease-out"
-                        :style="{ width: `${completionPercentage}%` }"
+
+                <div class="flex items-center gap-2 text-xs text-content-secondary">
+                    <span class="font-medium text-content-primary">{{ formattedSelectedDate }}</span>
+                    <Badge v-if="isToday" variant="extra" size="sm">Today</Badge>
+                    <Badge v-else variant="neutral" size="sm">Viewing Date</Badge>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <input
+                        type="date"
+                        :value="selectedDate"
+                        class="text-xs bg-surface-subdued text-content-primary border border-border-subtle rounded px-2.5 py-1 focus:ring-1 focus:ring-primary outline-none"
+                        @change="goToDate(($event.target as HTMLInputElement).value)"
                     />
+                </div>
+            </div>
+        </Card>
+
+        <!-- Summary Metrics Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <!-- Planned Hours -->
+            <Card compact>
+                <div class="flex items-center justify-between text-xs text-content-secondary">
+                    <span>Planned Time</span>
+                    <Icon name="clock" :size="15" class="text-accent" />
+                </div>
+                <p class="text-2xl font-bold tracking-tight text-content-primary mt-2">
+                    {{ totalPlannedHours }} <span class="text-sm font-normal text-content-muted">hrs</span>
+                </p>
+                <div class="mt-2 text-[11px] text-content-muted">
+                    {{ occurrences.length }} scheduled occurrence{{ occurrences.length === 1 ? '' : 's' }}
                 </div>
             </Card>
 
-            <!-- Task List Section -->
+            <!-- Actual Worked Today -->
+            <Card compact>
+                <div class="flex items-center justify-between text-xs text-content-secondary">
+                    <span>Actual Work (Selected Day)</span>
+                    <Icon name="check-circle" :size="15" class="text-status-success" />
+                </div>
+                <p class="text-2xl font-bold tracking-tight text-content-primary mt-2">
+                    {{ totalWorkedSelectedDateHours }} <span class="text-sm font-normal text-content-muted">hrs</span>
+                </p>
+                <div class="mt-2 text-[11px] text-status-success flex items-center gap-1 font-medium">
+                    <span>{{ todayWorkSessions.length }} session{{ todayWorkSessions.length === 1 ? '' : 's' }} recorded</span>
+                </div>
+            </Card>
+
+            <!-- Completion Status -->
+            <Card compact>
+                <div class="flex items-center justify-between text-xs text-content-secondary">
+                    <span>Completion Rate</span>
+                    <Icon name="tasks" :size="15" class="text-primary" />
+                </div>
+                <p class="text-2xl font-bold tracking-tight text-content-primary mt-2">
+                    {{ completionPercentage }}%
+                </p>
+                <div class="mt-2 text-[11px] text-content-muted">
+                    {{ completedOccurrencesCount }} of {{ occurrences.length }} completed
+                </div>
+            </Card>
+
+            <!-- Total Audit Log Intact -->
+            <Card compact>
+                <div class="flex items-center justify-between text-xs text-content-secondary">
+                    <span>Total Audit Sessions</span>
+                    <Icon name="flame" :size="15" class="text-primary" />
+                </div>
+                <p class="text-2xl font-bold tracking-tight text-primary mt-2">
+                    {{ totalAuditWorkedHours }} <span class="text-sm font-normal text-content-muted">hrs</span>
+                </p>
+                <div class="mt-2 text-[11px] text-content-muted">
+                    {{ recentWorkSessions.length }} sessions intact in audit trail
+                </div>
+            </Card>
+        </div>
+
+        <!-- MAIN LAYOUT: Occurrences & Audit History -->
+        <div class="space-y-8">
+            <!-- SECTION 1: SCHEDULED OCCURRENCES FOR THIS DAY -->
             <div class="space-y-4">
-                <div class="flex items-center justify-between">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border-subtle pb-3">
                     <div>
-                        <h2 class="text-base font-semibold text-content-primary tracking-tight">
-                            Today's Schedule
+                        <h2 class="text-base font-semibold text-content-primary tracking-tight flex items-center gap-2">
+                            <span>Today's Planned Occurrences</span>
+                            <Badge variant="neutral" size="sm">{{ occurrences.length }}</Badge>
                         </h2>
                         <p class="text-xs text-content-secondary">
-                            Tick tasks to mark them completed or log ad-hoc work
+                            Execute your scheduled blocks: mark complete, reopen, or record actual focus work. (To configure rules, visit Manage Tasks &gt; Edit Task).
                         </p>
                     </div>
 
-                    <span class="text-xs font-medium text-content-muted">
-                        {{ tasks.filter((t) => t.completed).length }}/{{ tasks.length }} Completed
-                    </span>
+                    <Button
+                        id="btn-edit-schedules"
+                        variant="ghost"
+                        size="sm"
+                        icon="edit"
+                        @click="router.visit('/tasks')"
+                    >
+                        Edit Schedules in Tasks &rarr;
+                    </Button>
                 </div>
 
-                <div class="space-y-2.5">
+                <!-- EMPTY STATE FOR OCCURRENCES -->
+                <div v-if="occurrences.length === 0">
+                    <EmptyState
+                        title="No occurrences scheduled for this day"
+                        description="Schedules and recurring rules are configured per-task. Go to Manage Tasks > Edit Task to plan occurrences for this day."
+                        icon="calendar"
+                    >
+                        <template #action>
+                            <Button
+                                id="btn-goto-tasks-empty"
+                                variant="primary"
+                                icon="tasks"
+                                @click="router.visit('/tasks')"
+                            >
+                                Go to Manage Tasks &rarr;
+                            </Button>
+                        </template>
+                    </EmptyState>
+                </div>
+
+                <!-- LIST OF OCCURRENCES -->
+                <div v-else class="space-y-3">
                     <div
-                        v-for="task in tasks"
-                        :key="task.id"
+                        v-for="occ in occurrences"
+                        :key="occ.id"
+                        :id="`occurrence-card-${occ.id}`"
                         :class="[
-                            'group rounded-xl border p-4 transition-all flex items-center justify-between gap-4',
+                            'group rounded-xl border p-4.5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4',
                             'bg-surface hover:border-border-strong',
-                            task.completed
-                                ? 'border-border-subtle bg-surface-subdued/30 opacity-80'
+                            occ.status === 'completed'
+                                ? 'border-status-success/30 bg-surface-subdued/40'
                                 : 'border-border-subtle shadow-xs',
-                            task.isExtra ? 'border-primary/30 bg-primary-subdued/20' : '',
                         ]"
                     >
-                        <div class="flex items-center gap-3.5 min-w-0">
-                            <!-- Completion Toggle -->
-                            <Checkbox
-                                :model-value="task.completed"
-                                @update:model-value="toggleTask(task.id)"
-                            />
+                        <div class="flex items-start md:items-center gap-3.5 min-w-0">
+                            <!-- Status Indicator Icon -->
+                            <div
+                                :class="[
+                                    'w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors',
+                                    occ.status === 'completed'
+                                        ? 'bg-status-success-subdued text-status-success'
+                                        : 'bg-primary-subdued text-primary',
+                                ]"
+                            >
+                                <Icon
+                                    :name="occ.status === 'completed' ? 'check-circle' : 'clock'"
+                                    :size="18"
+                                />
+                            </div>
 
-                            <!-- Task Details -->
+                            <!-- Occurrence Details -->
                             <div class="min-w-0">
                                 <div class="flex items-center gap-2 flex-wrap">
-                                    <span
+                                    <h3
                                         :class="[
                                             'text-sm font-semibold tracking-tight transition-colors',
-                                            task.completed
-                                                ? 'line-through text-content-muted'
+                                            occ.status === 'completed'
+                                                ? 'text-content-secondary line-through'
                                                 : 'text-content-primary',
                                         ]"
                                     >
-                                        {{ task.title }}
+                                        {{ occ.task?.title || 'Untitled Task' }}
+                                    </h3>
+
+                                    <!-- Status Badges -->
+                                    <Badge
+                                        v-if="occ.status === 'completed'"
+                                        variant="completed"
+                                        size="sm"
+                                        dot
+                                    >
+                                        Completed
+                                    </Badge>
+                                    <Badge
+                                        v-else-if="occ.status === 'pending'"
+                                        variant="planned"
+                                        size="sm"
+                                        dot
+                                    >
+                                        Pending
+                                    </Badge>
+                                    <Badge
+                                        v-else
+                                        variant="neutral"
+                                        size="sm"
+                                    >
+                                        {{ occ.status }}
+                                    </Badge>
+
+                                    <!-- Recorded Work Indicator -->
+                                    <span
+                                        v-if="occ.work_sessions && occ.work_sessions.length > 0"
+                                        class="text-xs bg-primary-subdued/70 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-medium flex items-center gap-1"
+                                    >
+                                        <Icon name="check" :size="12" />
+                                        {{ occ.work_sessions.length }} session{{ occ.work_sessions.length === 1 ? '' : 's' }} recorded ({{ formatMinutes(occ.work_sessions.reduce((s, w) => s + w.duration_minutes, 0)) }})
+                                    </span>
+                                </div>
+
+                                <div class="flex flex-wrap items-center gap-3 text-xs text-content-muted mt-1.5">
+                                    <span class="flex items-center gap-1 font-mono text-content-secondary">
+                                        <Icon name="clock" :size="12" />
+                                        {{ formatTimeOnly(occ.start_time) }}
+                                    </span>
+                                    <span>&bull;</span>
+                                    <span>Planned: {{ formatMinutes(occ.duration_minutes) }}</span>
+                                    <span v-if="occ.recurring_schedule">&bull;</span>
+                                    <span v-if="occ.recurring_schedule" class="capitalize">
+                                        {{ occ.recurring_schedule.type.replace('_', ' ') }}
+                                    </span>
+                                    <span v-if="occ.completed_at">&bull;</span>
+                                    <span v-if="occ.completed_at" class="text-status-success">
+                                        Done at {{ occ.completed_at.substring(11, 16) }}
+                                    </span>
+                                </div>
+
+                                <p v-if="occ.notes" class="text-xs text-content-secondary mt-1">
+                                    {{ occ.notes }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Action Controls -->
+                        <div class="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-border-subtle">
+                            <!-- Record Actual Work Button -->
+                            <Button
+                                :id="`btn-record-work-${occ.id}`"
+                                variant="subtle"
+                                size="sm"
+                                icon="clock"
+                                @click="openWorkModalForOccurrence(occ)"
+                            >
+                                Record Work
+                            </Button>
+
+                            <!-- Complete / Reopen Action -->
+                            <Button
+                                v-if="occ.status === 'pending'"
+                                :id="`btn-complete-${occ.id}`"
+                                variant="secondary"
+                                size="sm"
+                                icon="check"
+                                :loading="actionLoadingId === occ.id"
+                                @click="markOccurrenceComplete(occ)"
+                            >
+                                Mark Complete
+                            </Button>
+
+                            <Button
+                                v-else-if="occ.status === 'completed'"
+                                :id="`btn-reopen-${occ.id}`"
+                                variant="secondary"
+                                size="sm"
+                                icon="restore"
+                                :loading="actionLoadingId === occ.id"
+                                class="text-accent hover:text-accent font-medium"
+                                @click="reopenOccurrence(occ)"
+                            >
+                                Reopen
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 2: RECORDED WORK SESSIONS & AUDIT TRAIL -->
+            <div class="space-y-4 pt-4 border-t border-border-subtle">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                        <h2 class="text-base font-semibold text-content-primary tracking-tight flex items-center gap-2">
+                            <span>Recorded Work Sessions & Audit History</span>
+                            <Badge variant="extra" size="sm">
+                                {{ recentWorkSessions.length }} Total Intact
+                            </Badge>
+                        </h2>
+                        <p class="text-xs text-content-secondary">
+                            Immutable audit trail of actual time spent. Preserved permanently even when occurrences are completed or reopened.
+                        </p>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <SegmentedControl
+                            v-model="activeHistoryTab"
+                            size="sm"
+                            :options="[
+                                { label: 'Selected Day (' + todayWorkSessions.length + ')', value: 'selected' },
+                                { label: 'All Sessions (' + recentWorkSessions.length + ')', value: 'all' },
+                            ]"
+                        />
+
+                        <Button
+                            id="btn-log-adhoc-work"
+                            variant="primary"
+                            size="sm"
+                            icon="plus"
+                            @click="openWorkModalAdHoc(60)"
+                        >
+                            Log Unscheduled Work (1h)
+                        </Button>
+                    </div>
+                </div>
+
+                <!-- INTEGRITY GUARANTEE CALLOUT BANNER -->
+                <div class="rounded-lg bg-surface-subdued/50 border border-primary/20 p-3.5 flex items-start gap-3">
+                    <Icon name="sparkles" :size="18" class="text-primary shrink-0 mt-0.5" />
+                    <div class="text-xs space-y-0.5 text-content-secondary">
+                        <p class="font-medium text-content-primary">
+                            Historical Integrity Protection Active
+                        </p>
+                        <p>
+                            Work session records are independent entities. When you reopen or modify a schedule occurrence, all recorded work sessions, timestamps, durations, and notes remain <strong>completely intact and unmodified</strong>.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- WORK SESSIONS LIST -->
+                <div v-if="(activeHistoryTab === 'selected' ? todayWorkSessions : recentWorkSessions).length === 0">
+                    <EmptyState
+                        title="No work sessions recorded yet"
+                        description="Use 'Record Work' on an occurrence or 'Log Unscheduled Work' to start building your work history."
+                        icon="clock"
+                    >
+                        <template #action>
+                            <Button
+                                id="btn-empty-log-work"
+                                variant="secondary"
+                                icon="plus"
+                                @click="openWorkModalAdHoc(60)"
+                            >
+                                Log 1 Hour Unscheduled Work
+                            </Button>
+                        </template>
+                    </EmptyState>
+                </div>
+
+                <div v-else class="space-y-2.5">
+                    <div
+                        v-for="ws in (activeHistoryTab === 'selected' ? todayWorkSessions : recentWorkSessions)"
+                        :key="ws.id"
+                        :id="`work-session-card-${ws.id}`"
+                        class="rounded-xl border border-border-subtle bg-surface p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-border-strong transition-colors"
+                    >
+                        <div class="flex items-center gap-3.5 min-w-0">
+                            <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                                <Icon name="clock" :size="16" />
+                            </div>
+
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="text-sm font-semibold text-content-primary">
+                                        {{ ws.task?.title || 'Task #' + ws.task_id }}
                                     </span>
 
+                                    <!-- Duration Pill -->
+                                    <Badge variant="planned" size="sm">
+                                        {{ formatMinutes(ws.duration_minutes) }}
+                                    </Badge>
+
+                                    <!-- Occurrence Linkage Status -->
                                     <Badge
-                                        v-if="task.isExtra"
+                                        v-if="ws.schedule_occurrence_id"
                                         variant="extra"
                                         size="sm"
                                         dot
                                     >
-                                        Extra Work
+                                        Occurrence #{{ ws.schedule_occurrence_id }}
                                     </Badge>
-
-                                    <Badge
-                                        v-else-if="task.completed"
-                                        variant="completed"
-                                        size="sm"
-                                    >
-                                        Done
-                                    </Badge>
-
                                     <Badge
                                         v-else
-                                        variant="planned"
+                                        variant="neutral"
                                         size="sm"
                                     >
-                                        Planned
+                                        Unscheduled / Ad-hoc
                                     </Badge>
                                 </div>
 
-                                <div class="flex items-center gap-3 text-xs text-content-muted mt-1">
-                                    <span class="flex items-center gap-1 font-mono">
-                                        <Icon name="clock" :size="12" />
-                                        {{ task.startTime }} - {{ task.endTime }}
-                                    </span>
-                                    <span>&bull;</span>
-                                    <span>{{ task.category }}</span>
-                                    <span>&bull;</span>
-                                    <span>{{ (task.actualHours ?? task.plannedHours).toFixed(1) }} hrs</span>
+                                <div class="flex items-center gap-2 text-xs text-content-muted mt-1">
+                                    <span>Started: {{ ws.started_at }}</span>
+                                    <span v-if="ws.notes">&bull;</span>
+                                    <span v-if="ws.notes" class="text-content-secondary italic">"{{ ws.notes }}"</span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Action buttons -->
-                        <div class="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100">
-                            <IconButton
-                                icon="more-vertical"
-                                label="Task options"
-                                size="sm"
-                            />
+                        <div class="flex items-center gap-2 text-xs font-mono text-content-muted self-end sm:self-auto">
+                            <span class="text-status-success font-medium">✓ Intact</span>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- LOG EXTRA WORK DIALOG -->
+        <!-- ========================================== -->
+        <!-- DIALOG: RECORD ACTUAL WORK SESSION         -->
+        <!-- ========================================== -->
         <Dialog
-            :open="logModalOpen"
-            title="Log Extra Work"
-            description="Record unplanned time or ad-hoc tasks that occurred outside the regular schedule."
-            @close="logModalOpen = false"
+            :open="workModalOpen"
+            title="Record Work Session"
+            description="Log actual time spent on a task. Work records are preserved permanently in your history."
+            @close="workModalOpen = false"
         >
             <div class="space-y-4">
-                <Input
-                    v-model="newWorkTitle"
-                    label="What did you work on?"
-                    placeholder="e.g., Critical hotfix, client phone sync"
+                <Select
+                    v-model="workTaskId"
+                    label="Task"
+                    placeholder="Select task"
+                    :options="taskOptions"
                     required
                 />
 
                 <Select
-                    v-model="newWorkCategory"
-                    label="Category"
-                    :options="categoryOptions"
+                    v-model="workOccurrenceId"
+                    label="Link to Schedule Occurrence (Optional)"
+                    :options="occurrenceOptions"
+                    hint="Choose an occurrence to link this work session, or 'None' for ad-hoc unscheduled work."
                 />
 
-                <Input
-                    v-model="newWorkMinutes"
-                    type="number"
-                    label="Duration (minutes)"
-                    placeholder="30"
-                    required
-                />
+                <div class="grid grid-cols-2 gap-3">
+                    <Input
+                        v-model="workDate"
+                        type="date"
+                        label="Date"
+                        required
+                    />
+
+                    <Input
+                        v-model="workTime"
+                        type="time"
+                        label="Start Time"
+                        required
+                    />
+                </div>
+
+                <div>
+                    <Input
+                        v-model="workDurationMinutes"
+                        type="number"
+                        label="Actual Duration (minutes)"
+                        placeholder="120"
+                        required
+                    />
+                    <div class="flex items-center gap-2 mt-2">
+                        <span class="text-xs text-content-muted">Quick Presets:</span>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            class="text-xs py-0.5 px-2 h-6"
+                            @click="workDurationMinutes = 60"
+                        >
+                            1 hr (60m)
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            class="text-xs py-0.5 px-2 h-6 font-semibold text-primary"
+                            @click="workDurationMinutes = 120"
+                        >
+                            2 hrs (120m)
+                        </Button>
+                    </div>
+                </div>
 
                 <Input
-                    v-model="newWorkNotes"
-                    label="Optional Notes"
-                    placeholder="Any relevant context, tickets, or links..."
+                    v-model="workNotes"
+                    label="Notes / Accomplishments"
+                    placeholder="What did you achieve during this session?"
                 />
             </div>
 
             <template #actions>
                 <Button
                     variant="ghost"
-                    @click="logModalOpen = false"
+                    :disabled="workSubmitting"
+                    @click="workModalOpen = false"
                 >
                     Cancel
                 </Button>
                 <Button
+                    id="btn-submit-work"
                     variant="primary"
-                    @click="submitExtraWork"
+                    :loading="workSubmitting"
+                    @click="submitWorkSession"
                 >
-                    Save Work Entry
+                    Save Work Session ({{ (workDurationMinutes / 60).toFixed(1) }} hrs)
                 </Button>
             </template>
         </Dialog>

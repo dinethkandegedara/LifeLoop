@@ -4,8 +4,12 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\EmailVerificationOtpController;
 use App\Http\Controllers\Auth\PasswordResetOtpController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\ScheduleOccurrenceController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TaskController;
+use App\Http\Controllers\TodayController;
+use App\Http\Controllers\WorkSessionController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -48,9 +52,7 @@ Route::middleware('auth')->group(function () {
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', 'verified.otp'])->group(function () {
-    Route::get('/', function () {
-        return Inertia::render('Today');
-    })->name('today');
+    Route::get('/', TodayController::class)->name('today');
 
     Route::get('/settings', [SettingsController::class, 'edit'])->name('settings.edit');
     Route::put('/settings', [SettingsController::class, 'update'])->name('settings.update');
@@ -61,6 +63,23 @@ Route::middleware(['auth', 'verified.otp'])->group(function () {
     Route::patch('/tasks/{task}/archive', [TaskController::class, 'archive'])->name('tasks.archive');
     Route::patch('/tasks/{task}/unarchive', [TaskController::class, 'unarchive'])->name('tasks.unarchive');
     Route::delete('/tasks/{task}', [TaskController::class, 'destroy'])->name('tasks.destroy');
+
+    // Recurring Schedules
+    Route::post('/tasks/{task}/schedules/sync', [ScheduleController::class, 'sync'])->name('schedules.sync');
+    Route::post('/tasks/{task}/schedules', [ScheduleController::class, 'store'])->name('schedules.store');
+    Route::put('/schedules/{schedule}', [ScheduleController::class, 'update'])->name('schedules.update');
+    Route::delete('/schedules/{schedule}', [ScheduleController::class, 'destroy'])->name('schedules.destroy');
+
+    // Schedule Occurrences
+    Route::get('/occurrences', [ScheduleOccurrenceController::class, 'index'])->name('occurrences.index');
+    Route::put('/occurrences/{occurrence}', [ScheduleOccurrenceController::class, 'update'])->name('occurrences.update');
+    Route::patch('/occurrences/{occurrence}/complete', [ScheduleOccurrenceController::class, 'complete'])->name('occurrences.complete');
+    Route::patch('/occurrences/{occurrence}/reopen', [ScheduleOccurrenceController::class, 'reopen'])->name('occurrences.reopen');
+    Route::patch('/occurrences/{occurrence}/skip', [ScheduleOccurrenceController::class, 'skip'])->name('occurrences.skip');
+
+    // Work Sessions
+    Route::get('/work-sessions', [WorkSessionController::class, 'index'])->name('work-sessions.index');
+    Route::post('/work-sessions', [WorkSessionController::class, 'store'])->name('work-sessions.store');
 
     Route::get('/foundation', function () {
         $dbStatus = 'Connected';
